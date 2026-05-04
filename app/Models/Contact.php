@@ -9,8 +9,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Builder;
-use Spatie\Activitylog\Traits\LogsActivity;
-use Spatie\Activitylog\LogOptions;
+use Spatie\Activitylog\Models\Concerns\LogsActivity;
+use Spatie\Activitylog\Support\LogOptions;
 
 class Contact extends Model
 {
@@ -56,7 +56,7 @@ class Contact extends Model
         return LogOptions::defaults()
             ->logOnly(['first_name', 'last_name', 'phone', 'email', 'status', 'company'])
             ->logOnlyDirty()
-            ->dontSubmitEmptyLogs();
+            ->dontLogEmptyChanges();
     }
 
     // Accessors
@@ -92,7 +92,7 @@ class Contact extends Model
         return $this->status === 'invalid';
     }
 
-    public function canReceiveSms(): bool
+    public function isReceivable(): bool
     {
         return in_array($this->status, ['active', 'inactive']);
     }
@@ -131,13 +131,13 @@ class Contact extends Model
     public function scopeSearch(Builder $query, string $search): Builder
     {
         return $query->where(function ($q) use ($search) {
-            $q->where('full_name', 'ilike', "%{$search}%")
-              ->orWhere('first_name', 'ilike', "%{$search}%")
-              ->orWhere('last_name', 'ilike', "%{$search}%")
-              ->orWhere('phone', 'ilike', "%{$search}%")
-              ->orWhere('phone_normalised', 'ilike', "%{$search}%")
-              ->orWhere('email', 'ilike', "%{$search}%")
-              ->orWhere('company', 'ilike', "%{$search}%");
+            $q->where('full_name', 'LIKE', "%{$search}%")
+              ->orWhere('first_name', 'LIKE', "%{$search}%")
+              ->orWhere('last_name', 'LIKE', "%{$search}%")
+              ->orWhere('phone', 'LIKE', "%{$search}%")
+              ->orWhere('phone_normalised', 'LIKE', "%{$search}%")
+              ->orWhere('email', 'LIKE', "%{$search}%")
+              ->orWhere('company', 'LIKE', "%{$search}%");
         });
     }
 
@@ -154,12 +154,12 @@ class Contact extends Model
 
     public function tags(): BelongsToMany
     {
-        return $this->belongsToMany(Tag::class)->withTimestamps();
+        return $this->belongsToMany(Tag::class, 'contact_tag', 'contact_id', 'tag_id')->withTimestamps();
     }
 
     public function lists(): BelongsToMany
     {
-        return $this->belongsToMany(ListModel::class, 'contact_list')->withTimestamps();
+        return $this->belongsToMany(ListModel::class, 'contact_list', 'contact_id', 'list_id')->withTimestamps();
     }
 
     public function campaignRecipients(): HasMany

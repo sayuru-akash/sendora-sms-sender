@@ -23,6 +23,7 @@ return new class extends Migration
         Schema::create('contact_list', function (Blueprint $table) {
             $table->foreignId('contact_id')->constrained()->cascadeOnDelete();
             $table->foreignId('list_id')->constrained()->cascadeOnDelete();
+            $table->timestamps();
             $table->primary(['contact_id', 'list_id']);
         });
     }

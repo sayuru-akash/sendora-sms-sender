@@ -54,7 +54,7 @@ class Tag extends Model
 
     public function contacts(): BelongsToMany
     {
-        return $this->belongsToMany(Contact::class)->withTimestamps();
+        return $this->belongsToMany(Contact::class, 'contact_tag', 'tag_id', 'contact_id')->withTimestamps();
     }
 
     public function getContactCountAttribute(): int
