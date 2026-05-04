@@ -4,14 +4,15 @@ namespace App\Http\Controllers;
 
 use App\Models\Contact;
 use App\Models\Import;
+use App\Models\ListModel;
 use App\Models\SmsCampaign;
 use App\Models\SmsMessage;
 use App\Models\Tag;
-use App\Models\ListModel;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
+use Spatie\Activitylog\Models\Activity;
 
 class DashboardController extends Controller
 {
@@ -78,17 +79,16 @@ class DashboardController extends Controller
             ->orderBy('month')
             ->get();
 
-        // Campaign success/failure data (last 12 months)
-        $campaignData = SmsCampaign::select(
-            DB::raw("TO_CHAR(created_at, 'YYYY-MM') as month"),
-            DB::raw('SUM(sent_count) as sent'),
-            DB::raw('SUM(failed_count) as failed')
-        )
-            ->where('created_at', '>=', now()->subMonths(12))
-            ->where('status', 'completed')
-            ->groupBy('month')
-            ->orderBy('month')
-            ->get();
+        // Campaign performance data for chart (last 10 campaigns)
+        $campaignPerformance = SmsCampaign::where('status', 'completed')
+            ->latest()
+            ->limit(10)
+            ->get()
+            ->map(fn ($campaign) => [
+                'name' => mb_strimwidth($campaign->name, 0, 20, '…'),
+                'sent' => $campaign->sent_count,
+                'failed' => $campaign->failed_count,
+            ]);
 
         // Top lists by contact count
         $topLists = ListModel::withCount('contacts')
@@ -98,8 +98,8 @@ class DashboardController extends Controller
             ->map(fn ($list) => [
                 'id' => $list->id,
                 'name' => $list->name,
-                'colour' => $list->colour,
-                'contact_count' => $list->contacts_count,
+                'color' => $list->colour,
+                'contacts_count' => $list->contacts_count,
             ]);
 
         // Top tags by contact count
@@ -110,8 +110,8 @@ class DashboardController extends Controller
             ->map(fn ($tag) => [
                 'id' => $tag->id,
                 'name' => $tag->name,
-                'colour' => $tag->colour,
-                'contact_count' => $tag->contacts_count,
+                'color' => $tag->colour,
+                'contacts_count' => $tag->contacts_count,
             ]);
 
         // Contacts by status
@@ -119,22 +119,40 @@ class DashboardController extends Controller
             ->groupBy('status')
             ->pluck('count', 'status');
 
+        // Recent activity log
+        $activityLog = Activity::with('causer')
+            ->latest()
+            ->limit(15)
+            ->get()
+            ->map(fn ($log) => [
+                'id' => $log->id,
+                'event' => $log->event,
+                'description' => $log->description,
+                'subject_type' => $log->subject_type,
+                'subject_id' => $log->subject_id,
+                'causer_id' => $log->causer_id,
+                'causer_name' => $log->causer?->name,
+                'properties' => $log->properties,
+                'created_at' => $log->created_at?->toISOString(),
+            ]);
+
         return Inertia::render('Dashboard', [
             'stats' => [
                 'total_contacts' => $totalContacts,
                 'active_contacts' => $activeContacts,
-                'sent_this_month' => $sentThisMonth,
-                'failed_this_month' => $failedThisMonth,
+                'sms_sent_this_month' => $sentThisMonth,
+                'failed_sms' => $failedThisMonth,
                 'active_campaigns' => $activeCampaigns,
                 'scheduled_campaigns' => $scheduledCampaigns,
             ],
             'recent_campaigns' => $recentCampaigns,
             'recent_imports' => $recentImports,
             'contact_growth' => $contactGrowth,
-            'campaign_data' => $campaignData,
+            'campaign_performance' => $campaignPerformance,
             'top_lists' => $topLists,
             'top_tags' => $topTags,
             'contacts_by_status' => $contactsByStatus,
+            'activity_log' => $activityLog,
         ]);
     }
 }

@@ -8,9 +8,16 @@ use App\Jobs\FinalizeCampaign;
 use App\Jobs\PrepareCampaignRecipients;
 use App\Jobs\SendCampaignMessages;
 use App\Models\CampaignRecipient;
+use App\Models\Contact;
+use App\Models\ListModel;
+use App\Models\SavedSegment;
 use App\Models\SmsCampaign;
+use App\Models\SmsMessage;
+use App\Models\SmsTemplate;
+use App\Models\Tag;
 use App\Services\ActivityLogger;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
@@ -24,11 +31,14 @@ class CampaignController extends Controller
 
     public function index(Request $request): Response
     {
-        $campaigns = SmsCampaign::with('creator')
-            ->when($request->search, fn ($q, $search) => $q->search($search))
-            ->when($request->status, fn ($q, $status) => $q->byStatus($status))
-            ->latest()
-            ->paginate($request->get('per_page', 25));
+        $campaigns = $this->paginate(
+            SmsCampaign::with('creator')
+                ->when($request->search, fn ($q, $search) => $q->search($search))
+                ->when($request->status, fn ($q, $status) => $q->byStatus($status))
+                ->latest(),
+            $request,
+            25
+        );
 
         return Inertia::render('Campaigns/Index', [
             'campaigns' => $campaigns,
@@ -36,13 +46,31 @@ class CampaignController extends Controller
         ]);
     }
 
+    public function builder(): Response
+    {
+        $lists = ListModel::active()->orderBy('name')->get(['id', 'name', 'colour']);
+        $tags = Tag::orderBy('name')->get(['id', 'name', 'colour']);
+        $templates = SmsTemplate::active()->orderBy('name')->get(['id', 'name', 'body']);
+
+        // Estimated count - all active contacts by default
+        $estimatedCount = Contact::where('status', 'active')->count();
+
+        return Inertia::render('Campaigns/Builder', [
+            'lists' => $lists,
+            'tags' => $tags,
+            'templates' => $templates,
+            'estimated_count' => $estimatedCount,
+            'default_sender_id' => config('sms.source', ''),
+        ]);
+    }
+
     public function create(): Response
     {
         return Inertia::render('Campaigns/Create', [
-            'lists' => \App\Models\ListModel::active()->orderBy('name')->get(['id', 'name', 'colour']),
-            'tags' => \App\Models\Tag::orderBy('name')->get(['id', 'name', 'colour']),
-            'segments' => \App\Models\SavedSegment::orderBy('name')->get(['id', 'name', 'description']),
-            'templates' => \App\Models\SmsTemplate::active()->orderBy('name')->get(['id', 'name', 'body']),
+            'lists' => ListModel::active()->orderBy('name')->get(['id', 'name', 'colour']),
+            'tags' => Tag::orderBy('name')->get(['id', 'name', 'colour']),
+            'segments' => SavedSegment::orderBy('name')->get(['id', 'name', 'description']),
+            'templates' => SmsTemplate::active()->orderBy('name')->get(['id', 'name', 'body']),
         ]);
     }
 
@@ -54,7 +82,9 @@ class CampaignController extends Controller
             'message_body' => $request->message_body,
             'sender_id' => $request->sender_id,
             'target_type' => $request->target_type,
-            'target_filters' => $request->target_filters,
+            'target_filters' => $request->target_filters ?? $request->input('target_config'),
+            'template_id' => $request->template_id,
+            'notes' => $request->notes,
             'status' => $request->status ?? 'draft',
             'scheduled_at' => $request->scheduled_at,
             'created_by' => $request->user()->id,
@@ -74,28 +104,54 @@ class CampaignController extends Controller
     {
         $campaign->load(['creator', 'approver']);
 
+        $result = $this->paginate(
+            CampaignRecipient::where('campaign_id', $campaign->id)
+                ->with('contact')
+                ->when($request->status, fn ($q, $status) => $q->where('status', $status))
+                ->orderBy('id'),
+            $request,
+            50
+        );
+
+        // Transform recipients to match CampaignRecipient type
+        $recipients = [
+            'data' => array_map(fn ($recipient) => [
+                'id' => $recipient->id,
+                'campaign_id' => $recipient->campaign_id,
+                'contact_id' => $recipient->contact_id,
+                'contact_name' => $recipient->contact?->full_name ?? 'N/A',
+                'contact_phone' => $recipient->phone_normalised,
+                'status' => $recipient->status,
+                'error_message' => $recipient->error_message,
+                'sent_at' => $recipient->sent_at?->toISOString(),
+                'created_at' => $recipient->created_at?->toISOString(),
+            ], $result['data']),
+            'meta' => $result['meta'],
+        ];
+
         return Inertia::render('Campaigns/Show', [
             'campaign' => $campaign,
+            'recipients' => $recipients,
         ]);
     }
 
     public function edit(SmsCampaign $campaign): Response
     {
-        if (!$campaign->isDraft()) {
+        if (! $campaign->isDraft()) {
             abort(422, 'Only draft campaigns can be edited.');
         }
 
         return Inertia::render('Campaigns/Edit', [
             'campaign' => $campaign,
-            'lists' => \App\Models\ListModel::active()->orderBy('name')->get(['id', 'name', 'colour']),
-            'tags' => \App\Models\Tag::orderBy('name')->get(['id', 'name', 'colour']),
-            'segments' => \App\Models\SavedSegment::orderBy('name')->get(['id', 'name', 'description']),
+            'lists' => ListModel::active()->orderBy('name')->get(['id', 'name', 'colour']),
+            'tags' => Tag::orderBy('name')->get(['id', 'name', 'colour']),
+            'segments' => SavedSegment::orderBy('name')->get(['id', 'name', 'description']),
         ]);
     }
 
     public function update(CampaignRequest $request, SmsCampaign $campaign)
     {
-        if (!$campaign->isDraft()) {
+        if (! $campaign->isDraft()) {
             abort(422, 'Only draft campaigns can be edited.');
         }
 
@@ -118,7 +174,7 @@ class CampaignController extends Controller
 
     public function destroy(Request $request, SmsCampaign $campaign)
     {
-        if (!$campaign->canBeCancelled()) {
+        if (! $campaign->canBeCancelled()) {
             abort(422, 'This campaign cannot be deleted in its current status.');
         }
 
@@ -137,8 +193,8 @@ class CampaignController extends Controller
      */
     public function send(CampaignSendRequest $request, SmsCampaign $campaign)
     {
-        if (!$campaign->canBeSent()) {
-            abort(422, 'Campaign cannot be sent in its current status: ' . $campaign->status);
+        if (! $campaign->canBeSent()) {
+            abort(422, 'Campaign cannot be sent in its current status: '.$campaign->status);
         }
 
         // Dispatch recipient preparation, then sending chain
@@ -161,9 +217,9 @@ class CampaignController extends Controller
     /**
      * Pause a campaign.
      */
-    public function pause(Request $request, SmsCampaign $campaign): JsonResponse|\Illuminate\Http\RedirectResponse
+    public function pause(Request $request, SmsCampaign $campaign): JsonResponse|RedirectResponse
     {
-        if (!$campaign->canBePaused()) {
+        if (! $campaign->canBePaused()) {
             abort(422, 'Campaign cannot be paused in its current status.');
         }
 
@@ -181,9 +237,9 @@ class CampaignController extends Controller
     /**
      * Resume a paused campaign.
      */
-    public function resume(Request $request, SmsCampaign $campaign): JsonResponse|\Illuminate\Http\RedirectResponse
+    public function resume(Request $request, SmsCampaign $campaign): JsonResponse|RedirectResponse
     {
-        if (!$campaign->isPaused()) {
+        if (! $campaign->isPaused()) {
             abort(422, 'Only paused campaigns can be resumed.');
         }
 
@@ -203,9 +259,9 @@ class CampaignController extends Controller
     /**
      * Cancel a campaign.
      */
-    public function cancel(Request $request, SmsCampaign $campaign): JsonResponse|\Illuminate\Http\RedirectResponse
+    public function cancel(Request $request, SmsCampaign $campaign): JsonResponse|RedirectResponse
     {
-        if (!$campaign->canBeCancelled()) {
+        if (! $campaign->canBeCancelled()) {
             abort(422, 'Campaign cannot be cancelled in its current status.');
         }
 
@@ -239,7 +295,7 @@ class CampaignController extends Controller
         $newCampaign->pending_count = 0;
         $newCampaign->approved_by = null;
         $newCampaign->created_by = $request->user()->id;
-        $newCampaign->name = $campaign->name . ' (Copy)';
+        $newCampaign->name = $campaign->name.' (Copy)';
         $newCampaign->save();
 
         if ($request->expectsJson()) {
@@ -255,11 +311,14 @@ class CampaignController extends Controller
      */
     public function recipients(Request $request, SmsCampaign $campaign): Response|JsonResponse
     {
-        $recipients = CampaignRecipient::where('campaign_id', $campaign->id)
-            ->with('contact')
-            ->when($request->status, fn ($q, $status) => $q->where('status', $status))
-            ->orderBy('id')
-            ->paginate($request->get('per_page', 50));
+        $recipients = $this->paginate(
+            CampaignRecipient::where('campaign_id', $campaign->id)
+                ->with('contact')
+                ->when($request->status, fn ($q, $status) => $q->where('status', $status))
+                ->orderBy('id'),
+            $request,
+            50
+        );
 
         if ($request->expectsJson()) {
             return response()->json(['recipients' => $recipients]);
@@ -284,7 +343,7 @@ class CampaignController extends Controller
             ->groupBy('status')
             ->pluck('count', 'status');
 
-        $hourlyData = \App\Models\SmsMessage::where('campaign_id', $campaign->id)
+        $hourlyData = SmsMessage::where('campaign_id', $campaign->id)
             ->whereNotNull('sent_at')
             ->selectRaw("TO_CHAR(sent_at, 'YYYY-MM-DD HH24:00') as hour, COUNT(*) as count")
             ->groupBy('hour')
@@ -299,10 +358,23 @@ class CampaignController extends Controller
             ]);
         }
 
+        $stats = [
+            'total' => $campaign->total_recipients,
+            'sent' => (int) ($statusCounts['sent'] ?? 0),
+            'failed' => (int) ($statusCounts['failed'] ?? 0),
+            'skipped' => (int) ($statusCounts['skipped'] ?? 0),
+            'pending' => (int) ($statusCounts['pending'] ?? 0) + (int) ($statusCounts['queued'] ?? 0),
+            'success_rate' => $campaign->success_rate,
+            'timeline' => $hourlyData->map(fn ($item) => [
+                'time' => $item->hour,
+                'sent' => 0,
+                'failed' => 0,
+            ])->toArray(),
+        ];
+
         return Inertia::render('Campaigns/Report', [
             'campaign' => $campaign,
-            'status_counts' => $statusCounts,
-            'hourly_data' => $hourlyData,
+            'stats' => $stats,
         ]);
     }
 }

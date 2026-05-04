@@ -11,16 +11,19 @@ class ActivityLogController extends Controller
 {
     public function index(Request $request): Response
     {
-        $activities = Activity::with('causer')
-            ->when($request->search, function ($q, $search) {
-                $q->where('description', 'ilike', "%{$search}%")
-                    ->orWhere('log_name', 'ilike', "%{$search}%");
-            })
-            ->when($request->event, fn ($q, $event) => $q->where('event', $event))
-            ->when($request->log_name, fn ($q, $logName) => $q->where('log_name', $logName))
-            ->when($request->causer_id, fn ($q, $causerId) => $q->where('causer_id', $causerId))
-            ->latest()
-            ->paginate($request->get('per_page', 25));
+        $activities = $this->paginate(
+            Activity::with('causer')
+                ->when($request->search, function ($q, $search) {
+                    $q->where('description', 'ilike', "%{$search}%")
+                        ->orWhere('log_name', 'ilike', "%{$search}%");
+                })
+                ->when($request->event, fn ($q, $event) => $q->where('event', $event))
+                ->when($request->log_name, fn ($q, $logName) => $q->where('log_name', $logName))
+                ->when($request->causer_id, fn ($q, $causerId) => $q->where('causer_id', $causerId))
+                ->latest(),
+            $request,
+            25
+        );
 
         return Inertia::render('ActivityLogs/Index', [
             'activities' => $activities,

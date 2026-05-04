@@ -207,7 +207,7 @@ const columns = [
           <Download class="h-4 w-4" />
           Export
         </Button>
-        <Link :href="route('imports.upload')">
+        <Link :href="route('imports.create')">
           <Button variant="outline">
             <Upload class="h-4 w-4" />
             Import

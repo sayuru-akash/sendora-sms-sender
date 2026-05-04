@@ -74,7 +74,7 @@ const columns = [
             Send Campaign
           </Button>
         </Link>
-        <Link :href="route('imports.upload', { list_id: list.id })">
+        <Link :href="route('imports.create', { list_id: list.id })">
           <Button variant="outline">
             <Upload class="h-4 w-4" />
             Import Into List

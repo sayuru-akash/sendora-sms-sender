@@ -42,7 +42,7 @@ const pages = computed(() => {
     <nav class="flex items-center gap-1">
       <Link
         v-if="meta.current_page > 1"
-        :href="route(route().current()!, { ...route().params, page: meta.current_page - 1 })"
+        :href="route(route().current() ?? '', { ...route().params, page: meta.current_page - 1 })"
         preserve-scroll
         class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-white text-sm text-foreground hover:bg-gray-50 transition-colors"
       >
@@ -61,7 +61,7 @@ const pages = computed(() => {
         </span>
         <Link
           v-else
-          :href="route(route().current()!, { ...route().params, page })"
+          :href="route(route().current() ?? '', { ...route().params, page })"
           preserve-scroll
           :class="
             cn(
@@ -78,7 +78,7 @@ const pages = computed(() => {
 
       <Link
         v-if="meta.current_page < meta.last_page"
-        :href="route(route().current()!, { ...route().params, page: meta.current_page + 1 })"
+        :href="route(route().current() ?? '', { ...route().params, page: meta.current_page + 1 })"
         preserve-scroll
         class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-white text-sm text-foreground hover:bg-gray-50 transition-colors"
       >

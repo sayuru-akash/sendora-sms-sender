@@ -19,6 +19,7 @@ class TagRequest extends FormRequest
         return [
             'name' => ['required', 'string', 'max:255', Rule::unique('tags', 'name')->ignore($tagId)],
             'colour' => ['nullable', 'string', 'max:7', 'regex:/^#[0-9A-Fa-f]{6}$/'],
+            'color' => ['nullable', 'string', 'max:7', 'regex:/^#[0-9A-Fa-f]{6}$/'],
             'description' => ['nullable', 'string', 'max:1000'],
         ];
     }

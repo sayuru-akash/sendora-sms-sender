@@ -2,11 +2,11 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use Illuminate\Database\Eloquent\Builder;
 
 class SmsTemplate extends Model
 {
@@ -21,6 +21,8 @@ class SmsTemplate extends Model
         'created_by',
     ];
 
+    protected $appends = ['character_count', 'sms_segments', 'usage_count', 'created_by_name'];
+
     protected function casts(): array
     {
         return [
@@ -33,8 +35,9 @@ class SmsTemplate extends Model
     {
         $body = $this->body;
         foreach ($data as $key => $value) {
-            $body = str_replace('{' . $key . '}', (string) $value, $body);
+            $body = str_replace('{'.$key.'}', (string) $value, $body);
         }
+
         return $body;
     }
 
@@ -43,12 +46,27 @@ class SmsTemplate extends Model
         return mb_strlen($this->body);
     }
 
-    public function getSmsSegmentCountAttribute(): int
+    public function getSmsSegmentsAttribute(): int
     {
         $length = $this->character_count;
-        if ($length <= 160) return 1;
-        if ($length <= 306) return 2;
+        if ($length <= 160) {
+            return 1;
+        }
+        if ($length <= 306) {
+            return 2;
+        }
+
         return (int) ceil($length / 153);
+    }
+
+    public function getUsageCountAttribute(): int
+    {
+        return SmsCampaign::where('template_id', $this->id)->count();
+    }
+
+    public function getCreatedByNameAttribute(): ?string
+    {
+        return $this->creator?->name;
     }
 
     public function getAvailableVariablesAttribute(): array
@@ -57,6 +75,7 @@ class SmsTemplate extends Model
             return $this->variables;
         }
         preg_match_all('/\{(\w+)\}/', $this->body, $matches);
+
         return $matches[1] ?? [];
     }
 

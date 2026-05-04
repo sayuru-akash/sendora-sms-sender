@@ -33,7 +33,6 @@ type BadgeVariants = VariantProps<typeof badgeVariants>;
 
 defineProps<{
   variant?: BadgeVariants['variant'];
-  class?: string;
 }>();
 </script>
 

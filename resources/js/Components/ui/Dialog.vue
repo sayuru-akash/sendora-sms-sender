@@ -15,7 +15,6 @@ import { computed } from 'vue';
 
 const props = defineProps<{
   open?: boolean;
-  class?: string;
   contentClass?: string;
   title?: string;
   description?: string;

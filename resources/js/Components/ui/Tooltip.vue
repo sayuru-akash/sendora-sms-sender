@@ -5,7 +5,6 @@ import { TooltipRoot, TooltipTrigger, TooltipPortal, TooltipContent, TooltipArro
 defineProps<{
   text: string;
   side?: 'top' | 'right' | 'bottom' | 'left';
-  class?: string;
 }>();
 </script>
 

@@ -8,7 +8,6 @@ const props = defineProps<{
   failed: number;
   pending: number;
   total: number;
-  class?: string;
 }>();
 
 const sentPercent = computed(() => props.total > 0 ? (props.sent / props.total) * 100 : 0);

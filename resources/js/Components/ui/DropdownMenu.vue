@@ -11,9 +11,7 @@ import {
   DropdownMenuGroup,
 } from 'reka-ui';
 
-defineProps<{
-  class?: string;
-}>();
+defineProps<{}>();
 
 defineEmits<{
   'update:open': [value: boolean];

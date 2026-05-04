@@ -20,6 +20,7 @@ class ListRequest extends FormRequest
             'name' => ['required', 'string', 'max:255', Rule::unique('lists', 'name')->ignore($listId)],
             'description' => ['nullable', 'string', 'max:1000'],
             'colour' => ['nullable', 'string', 'max:7', 'regex:/^#[0-9A-Fa-f]{6}$/'],
+            'color' => ['nullable', 'string', 'max:7', 'regex:/^#[0-9A-Fa-f]{6}$/'],
             'status' => ['nullable', Rule::in(['active', 'archived'])],
         ];
     }

@@ -14,11 +14,15 @@ class SettingRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'settings' => ['required', 'array'],
+            'settings' => ['nullable', 'array'],
             'settings.*.key' => ['required', 'string', 'max:255'],
             'settings.*.value' => ['nullable'],
             'settings.*.type' => ['nullable', 'in:string,integer,boolean,json,text'],
             'settings.*.group' => ['nullable', 'string', 'max:255'],
+            'company_name' => ['nullable', 'string', 'max:255'],
+            'timezone' => ['nullable', 'string', 'max:255'],
+            'date_format' => ['nullable', 'string', 'max:255'],
+            'default_country_code' => ['nullable', 'string', 'max:10'],
         ];
     }
 }

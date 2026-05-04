@@ -51,9 +51,18 @@ const form = useForm({
 });
 
 function submit() {
-  form.phone_column = phoneColumn.value;
-  form.mapping = mapping.value;
-  form.post(route('imports.process', props.import_id));
+  // Transform mapping from file_column->contact_field to contact_field->file_column
+  const columnMapping: Record<string, string> = {};
+  for (const [fileCol, contactField] of Object.entries(mapping.value)) {
+    if (contactField) {
+      columnMapping[contactField] = fileCol;
+    }
+  }
+
+  form.transform((data) => ({
+    column_mapping: columnMapping,
+    phone_column: phoneColumn.value,
+  })).post(route('imports.confirm', props.import_id));
 }
 
 const isValid = computed(() => {

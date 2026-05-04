@@ -6,11 +6,10 @@ use App\Http\Requests\SettingRequest;
 use App\Http\Requests\TestSmsRequest;
 use App\Models\SystemSetting;
 use App\Services\ActivityLogger;
-use App\Services\Sms\SmsService;
 use App\Services\PhoneNormalizer;
+use App\Services\Sms\SmsService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\RateLimiter;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -23,7 +22,16 @@ class SettingController extends Controller
 
     public function index(Request $request): Response
     {
-        $settings = SystemSetting::notSensitive()->get()->groupBy('group');
+        $settings = [
+            'company_name' => SystemSetting::get('company_name', 'Sendora'),
+            'timezone' => SystemSetting::get('timezone', 'Asia/Colombo'),
+            'date_format' => SystemSetting::get('date_format', 'd/m/Y'),
+            'default_country_code' => SystemSetting::get('default_country_code', '+94'),
+            'sender_id' => config('sms.source', ''),
+            'sms_provider' => config('sms.provider', 'unknown'),
+            'max_import_file_size' => (int) SystemSetting::get('max_import_file_size', 10),
+            'default_duplicate_handling' => SystemSetting::get('default_duplicate_handling', 'skip'),
+        ];
 
         return Inertia::render('Settings/Index', [
             'settings' => $settings,
@@ -32,8 +40,26 @@ class SettingController extends Controller
 
     public function update(SettingRequest $request): JsonResponse
     {
-        $settingsData = $request->input('settings', []);
+        $settingsMap = [
+            'company_name' => ['type' => 'string', 'group' => 'general'],
+            'timezone' => ['type' => 'string', 'group' => 'general'],
+            'date_format' => ['type' => 'string', 'group' => 'general'],
+            'default_country_code' => ['type' => 'string', 'group' => 'general'],
+        ];
 
+        foreach ($settingsMap as $key => $config) {
+            if ($request->has($key)) {
+                SystemSetting::set(
+                    $key,
+                    $request->input($key),
+                    $config['type'],
+                    $config['group'],
+                );
+            }
+        }
+
+        // Also handle legacy format (settings array)
+        $settingsData = $request->input('settings', []);
         foreach ($settingsData as $settingData) {
             SystemSetting::set(
                 $settingData['key'],
@@ -43,9 +69,7 @@ class SettingController extends Controller
             );
         }
 
-        $this->activityLogger->logSettingsChanged(
-            collect($settingsData)->pluck('group')->unique()->implode(', ')
-        );
+        $this->activityLogger->logSettingsChanged('general');
 
         return response()->json(['message' => 'Settings updated successfully.']);
     }
@@ -56,10 +80,11 @@ class SettingController extends Controller
     public function testSms(TestSmsRequest $request, SmsService $smsService, PhoneNormalizer $phoneNormalizer): JsonResponse
     {
         // Rate limit: 5 test SMS per minute per user
-        $rateLimitKey = 'test-sms:' . $request->user()->id;
+        $rateLimitKey = 'test-sms:'.$request->user()->id;
 
         if (RateLimiter::tooManyAttempts($rateLimitKey, 5)) {
             $seconds = RateLimiter::availableIn($rateLimitKey);
+
             return response()->json([
                 'message' => "Too many test SMS attempts. Please try again in {$seconds} seconds.",
             ], 429);
@@ -80,7 +105,7 @@ class SettingController extends Controller
 
         return response()->json([
             'success' => $result->success,
-            'message' => $result->success ? 'Test SMS sent successfully.' : 'Test SMS failed: ' . $result->errorMessage,
+            'message' => $result->success ? 'Test SMS sent successfully.' : 'Test SMS failed: '.$result->errorMessage,
         ], $result->success ? 200 : 422);
     }
 }

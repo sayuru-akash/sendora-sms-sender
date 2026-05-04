@@ -5,7 +5,6 @@ const props = defineProps<{
   modelValue?: boolean;
   disabled?: boolean;
   id?: string;
-  class?: string;
 }>();
 
 const emit = defineEmits<{

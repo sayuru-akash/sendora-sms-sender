@@ -102,6 +102,27 @@ export interface ListFormData {
     status?: string;
 }
 
+export interface SavedSegment {
+    id: number;
+    name: string;
+    description: string | null;
+    filters: {
+        status?: string;
+        source?: string;
+        district?: string;
+        city?: string;
+        gender?: string;
+        date_from?: string;
+        date_to?: string;
+        tag_ids?: number[];
+        list_ids?: number[];
+    };
+    created_by: number;
+    creator?: User;
+    created_at: string;
+    updated_at: string;
+}
+
 export interface SmsRecord {
     id: number;
     campaign_id: number | null;

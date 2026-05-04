@@ -4,7 +4,6 @@ import { DropdownMenuLabel } from 'reka-ui';
 
 defineProps<{
   inset?: boolean;
-  class?: string;
 }>();
 </script>
 

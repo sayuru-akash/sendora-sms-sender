@@ -2,7 +2,6 @@
 import { cn } from '@/lib/utils';
 
 defineProps<{
-  class?: string;
   selected?: boolean;
 }>();
 </script>

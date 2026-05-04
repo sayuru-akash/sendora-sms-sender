@@ -4,7 +4,6 @@ import { TabsTrigger } from 'reka-ui';
 
 defineProps<{
   value: string;
-  class?: string;
   disabled?: boolean;
 }>();
 </script>

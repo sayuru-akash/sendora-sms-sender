@@ -3,7 +3,6 @@ import { cn } from '@/lib/utils';
 
 defineProps<{
   orientation?: 'horizontal' | 'vertical';
-  class?: string;
 }>();
 </script>
 

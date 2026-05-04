@@ -4,82 +4,79 @@ namespace App\Http\Controllers;
 
 use App\Models\CampaignRecipient;
 use App\Models\Contact;
+use App\Models\ListModel;
 use App\Models\SmsCampaign;
 use App\Models\SmsMessage;
+use App\Models\Tag;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ReportController extends Controller
 {
     public function index(Request $request): Response
     {
-        // Overall SMS stats
-        $totalSent = SmsMessage::where('status', 'sent')->count();
-        $totalFailed = SmsMessage::where('status', 'failed')->count();
-        $totalDelivered = SmsMessage::where('status', 'delivered')->count();
-        $totalPending = SmsMessage::where('status', 'pending')->count();
-
-        // This month stats
-        $startOfMonth = now()->startOfMonth();
-        $sentThisMonth = SmsMessage::where('status', 'sent')
-            ->where('sent_at', '>=', $startOfMonth)
-            ->count();
-        $failedThisMonth = SmsMessage::where('status', 'failed')
-            ->where('failed_at', '>=', $startOfMonth)
-            ->count();
-
-        // Campaign stats
+        // Overall stats
+        $totalContacts = Contact::count();
+        $totalSmsSent = SmsMessage::whereIn('status', ['sent', 'delivered'])->count();
         $totalCampaigns = SmsCampaign::count();
-        $completedCampaigns = SmsCampaign::where('status', 'completed')->count();
+        $completedCampaigns = SmsCampaign::where('status', 'completed');
+        $avgSuccessRate = $completedCampaigns->count() > 0
+            ? round($completedCampaigns->get()->avg('success_rate'), 1)
+            : 0;
 
-        // Daily SMS volume (last 30 days)
-        $dailyVolume = SmsMessage::select(
-            DB::raw("TO_CHAR(sent_at, 'YYYY-MM-DD') as date"),
+        // SMS over time (last 12 months)
+        $smsOverTime = SmsMessage::select(
+            DB::raw("TO_CHAR(sent_at, 'YYYY-MM') as month"),
             DB::raw("SUM(CASE WHEN status = 'sent' THEN 1 ELSE 0 END) as sent"),
             DB::raw("SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed")
         )
-            ->where('sent_at', '>=', now()->subDays(30))
-            ->groupBy('date')
-            ->orderBy('date')
+            ->where('sent_at', '>=', now()->subMonths(12))
+            ->groupBy('month')
+            ->orderBy('month')
             ->get();
 
-        // Top campaigns by volume
-        $topCampaigns = SmsCampaign::where('status', 'completed')
-            ->orderByDesc('total_recipients')
+        // Contacts by source
+        $contactsBySource = Contact::select('source', DB::raw('COUNT(*) as count'))
+            ->whereNotNull('source')
+            ->groupBy('source')
+            ->get()
+            ->map(fn ($item) => ['source' => $item->source ?? 'unknown', 'count' => (int) $item->count]);
+
+        // Contacts by status
+        $contactsByStatus = Contact::select('status', DB::raw('COUNT(*) as count'))
+            ->groupBy('status')
+            ->get()
+            ->map(fn ($item) => ['status' => $item->status, 'count' => (int) $item->count]);
+
+        // Top lists
+        $topLists = ListModel::withCount('contacts')
+            ->orderByDesc('contacts_count')
             ->limit(10)
             ->get()
-            ->map(fn ($campaign) => [
-                'id' => $campaign->id,
-                'name' => $campaign->name,
-                'total_recipients' => $campaign->total_recipients,
-                'sent_count' => $campaign->sent_count,
-                'failed_count' => $campaign->failed_count,
-                'success_rate' => $campaign->success_rate,
-                'completed_at' => $campaign->completed_at?->toISOString(),
-            ]);
+            ->map(fn ($list) => ['name' => $list->name, 'count' => (int) $list->contacts_count]);
 
-        // SMS by provider
-        $byProvider = SmsMessage::select('provider', DB::raw('COUNT(*) as count'))
-            ->whereNotNull('provider')
-            ->groupBy('provider')
-            ->pluck('count', 'provider');
+        // Top tags
+        $topTags = Tag::withCount('contacts')
+            ->orderByDesc('contacts_count')
+            ->limit(10)
+            ->get()
+            ->map(fn ($tag) => ['name' => $tag->name, 'count' => (int) $tag->contacts_count]);
 
         return Inertia::render('Reports/Index', [
             'stats' => [
-                'total_sent' => $totalSent,
-                'total_failed' => $totalFailed,
-                'total_delivered' => $totalDelivered,
-                'total_pending' => $totalPending,
-                'sent_this_month' => $sentThisMonth,
-                'failed_this_month' => $failedThisMonth,
+                'total_contacts' => $totalContacts,
+                'total_sms_sent' => $totalSmsSent,
                 'total_campaigns' => $totalCampaigns,
-                'completed_campaigns' => $completedCampaigns,
+                'avg_success_rate' => $avgSuccessRate,
             ],
-            'daily_volume' => $dailyVolume,
-            'top_campaigns' => $topCampaigns,
-            'by_provider' => $byProvider,
+            'sms_over_time' => $smsOverTime,
+            'contacts_by_source' => $contactsBySource,
+            'contacts_by_status' => $contactsByStatus,
+            'top_lists' => $topLists,
+            'top_tags' => $topTags,
         ]);
     }
 
@@ -119,11 +116,11 @@ class ReportController extends Controller
     /**
      * Export campaign report as CSV.
      */
-    public function exportCampaign(SmsCampaign $campaign): \Symfony\Component\HttpFoundation\StreamedResponse
+    public function exportCampaign(SmsCampaign $campaign): StreamedResponse
     {
         $headers = [
             'Content-Type' => 'text/csv',
-            'Content-Disposition' => 'attachment; filename="campaign_report_' . $campaign->id . '_' . now()->format('Y-m_d_His') . '.csv"',
+            'Content-Disposition' => 'attachment; filename="campaign_report_'.$campaign->id.'_'.now()->format('Y-m_d_His').'.csv"',
         ];
 
         return response()->stream(function () use ($campaign) {

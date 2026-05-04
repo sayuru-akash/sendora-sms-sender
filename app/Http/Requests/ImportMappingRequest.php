@@ -28,6 +28,7 @@ class ImportMappingRequest extends FormRequest
             'column_mapping.date_of_birth' => ['nullable', 'string'],
             'column_mapping.source' => ['nullable', 'string'],
             'column_mapping.notes' => ['nullable', 'string'],
+            'phone_column' => ['nullable', 'string'],
             'options' => ['nullable', 'array'],
             'options.duplicate_handling' => ['nullable', 'in:skip,update,add_to_list'],
             'options.default_status' => ['nullable', 'in:active,inactive'],

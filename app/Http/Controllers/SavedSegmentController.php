@@ -2,11 +2,10 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\SavedSegment;
 use App\Models\Contact;
+use App\Models\SavedSegment;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -14,10 +13,13 @@ class SavedSegmentController extends Controller
 {
     public function index(Request $request): Response
     {
-        $segments = SavedSegment::with('creator')
-            ->when($request->search, fn ($q, $search) => $q->where('name', 'ilike', "%{$search}%"))
-            ->latest()
-            ->paginate($request->get('per_page', 25));
+        $segments = $this->paginate(
+            SavedSegment::with('creator')
+                ->when($request->search, fn ($q, $search) => $q->where('name', 'ilike', "%{$search}%"))
+                ->latest(),
+            $request,
+            25
+        );
 
         return Inertia::render('Segments/Index', [
             'segments' => $segments,
@@ -130,39 +132,39 @@ class SavedSegmentController extends Controller
     {
         $query->canReceiveSms();
 
-        if (!empty($filters['status'])) {
+        if (! empty($filters['status'])) {
             $query->where('status', $filters['status']);
         }
 
-        if (!empty($filters['source'])) {
+        if (! empty($filters['source'])) {
             $query->where('source', $filters['source']);
         }
 
-        if (!empty($filters['district'])) {
+        if (! empty($filters['district'])) {
             $query->where('district', $filters['district']);
         }
 
-        if (!empty($filters['city'])) {
+        if (! empty($filters['city'])) {
             $query->where('city', $filters['city']);
         }
 
-        if (!empty($filters['gender'])) {
+        if (! empty($filters['gender'])) {
             $query->where('gender', $filters['gender']);
         }
 
-        if (!empty($filters['date_from'])) {
+        if (! empty($filters['date_from'])) {
             $query->where('created_at', '>=', $filters['date_from']);
         }
 
-        if (!empty($filters['date_to'])) {
+        if (! empty($filters['date_to'])) {
             $query->where('created_at', '<=', $filters['date_to']);
         }
 
-        if (!empty($filters['tag_ids'])) {
+        if (! empty($filters['tag_ids'])) {
             $query->whereHas('tags', fn ($tq) => $tq->whereIn('tags.id', $filters['tag_ids']));
         }
 
-        if (!empty($filters['list_ids'])) {
+        if (! empty($filters['list_ids'])) {
             $query->whereHas('lists', fn ($lq) => $lq->whereIn('lists.id', $filters['list_ids']));
         }
 

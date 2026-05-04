@@ -6,7 +6,6 @@ defineProps<{
   inset?: boolean;
   destructive?: boolean;
   disabled?: boolean;
-  class?: string;
 }>();
 
 defineEmits<{

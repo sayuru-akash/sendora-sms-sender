@@ -26,6 +26,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Contacts
     Route::post('/contacts/bulk-action', [ContactController::class, 'bulkAction'])->name('contacts.bulk-action');
     Route::get('/contacts/export', [ContactController::class, 'export'])->name('contacts.export');
+    Route::post('/contacts/{contact}/block', [ContactController::class, 'block'])->name('contacts.block');
     Route::resource('contacts', ContactController::class);
 
     // Tags
@@ -38,6 +39,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::resource('lists', ListController::class);
 
     // Imports
+    Route::get('/imports/create', [ImportController::class, 'create'])->name('imports.create');
     Route::post('/imports/upload', [ImportController::class, 'upload'])->name('imports.upload');
     Route::get('/imports/{import}/mapping', [ImportController::class, 'mapping'])->name('imports.mapping');
     Route::post('/imports/{import}/preview', [ImportController::class, 'preview'])->name('imports.preview');
@@ -50,6 +52,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::resource('templates', SmsTemplateController::class);
 
     // Campaigns
+    Route::get('/campaigns/builder', [CampaignController::class, 'builder'])->name('campaigns.builder');
     Route::post('/campaigns/{campaign}/send', [CampaignController::class, 'send'])->name('campaigns.send');
     Route::post('/campaigns/{campaign}/pause', [CampaignController::class, 'pause'])->name('campaigns.pause');
     Route::post('/campaigns/{campaign}/resume', [CampaignController::class, 'resume'])->name('campaigns.resume');

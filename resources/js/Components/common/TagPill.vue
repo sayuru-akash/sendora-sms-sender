@@ -6,7 +6,6 @@ defineProps<{
   name: string;
   color?: string;
   removable?: boolean;
-  class?: string;
 }>();
 
 defineEmits<{

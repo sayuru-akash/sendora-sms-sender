@@ -26,7 +26,6 @@ type AlertVariants = VariantProps<typeof alertVariants>;
 
 const props = defineProps<{
   variant?: AlertVariants['variant'];
-  class?: string;
   title?: string;
 }>();
 

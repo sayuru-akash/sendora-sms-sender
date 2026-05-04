@@ -8,7 +8,6 @@ const props = defineProps<{
   alt?: string;
   fallback?: string;
   size?: 'sm' | 'default' | 'lg' | 'xl';
-  class?: string;
 }>();
 
 const hasError = ref(false);

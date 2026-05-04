@@ -15,7 +15,12 @@ class ContactImportRequest extends FormRequest
     {
         return [
             'file' => ['required', 'file', 'mimes:csv,xlsx,xls', 'max:10240'], // 10MB max
-            'type' => ['required', 'in:csv,xlsx'],
+            'type' => ['nullable', 'in:csv,xlsx'],
+            'duplicate_handling' => ['nullable', 'in:skip,update,add'],
+            'list_ids' => ['nullable', 'array'],
+            'list_ids.*' => ['integer', 'exists:lists,id'],
+            'tag_ids' => ['nullable', 'array'],
+            'tag_ids.*' => ['integer', 'exists:tags,id'],
             'list_id' => ['nullable', 'integer', 'exists:lists,id'],
         ];
     }

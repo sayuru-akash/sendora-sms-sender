@@ -23,7 +23,7 @@ defineProps<{
   <AppLayout :breadcrumbs="[{ label: 'Imports' }]">
     <PageHeader title="Imports" subtitle="Manage your contact imports">
       <template #actions>
-        <Link :href="route('imports.upload')">
+        <Link :href="route('imports.create')">
           <Button>
             <Upload class="h-4 w-4" />
             Upload File

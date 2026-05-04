@@ -8,7 +8,6 @@ const props = defineProps<{
   disabled?: boolean;
   readonly?: boolean;
   error?: string;
-  class?: string;
   id?: string;
   rows?: number;
   maxlength?: number;

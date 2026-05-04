@@ -9,7 +9,6 @@ const props = defineProps<{
   disabled?: boolean;
   readonly?: boolean;
   error?: string;
-  class?: string;
   id?: string;
   autofocus?: boolean;
   autocomplete?: string;

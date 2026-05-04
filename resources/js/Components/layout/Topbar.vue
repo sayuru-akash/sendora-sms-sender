@@ -1,18 +1,10 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import { Link, usePage, router } from '@inertiajs/vue3';
-import { Search, LogOut, User, Menu, X } from 'lucide-vue-next';
+import { Search, LogOut, User, Menu, X, ChevronDown } from 'lucide-vue-next';
 import { cn } from '@/lib/utils';
 import Avatar from '@/Components/ui/Avatar.vue';
 import Button from '@/Components/ui/Button.vue';
-import {
-  DropdownMenuRoot,
-  DropdownMenuTrigger,
-  DropdownMenuPortal,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-} from 'reka-ui';
 import type { BreadcrumbItem } from '@/types';
 
 defineProps<{
@@ -25,8 +17,9 @@ const emit = defineEmits<{
 }>();
 
 const page = usePage();
-const user = computed(() => page.props.auth.user);
+const user = computed(() => page.props.auth?.user ?? { name: 'User', email: '', role: 'staff' });
 const searchQuery = ref('');
+const menuOpen = ref(false);
 
 function handleSearch() {
   if (searchQuery.value.trim()) {
@@ -37,6 +30,14 @@ function handleSearch() {
 
 function logout() {
   router.post(route('logout'));
+}
+
+function toggleMenu() {
+  menuOpen.value = !menuOpen.value;
+}
+
+function closeMenu() {
+  menuOpen.value = false;
 }
 </script>
 
@@ -86,48 +87,51 @@ function logout() {
       </form>
     </div>
 
-    <!-- Right: User Menu -->
-    <div class="flex items-center gap-2">
-      <DropdownMenuRoot>
-        <DropdownMenuTrigger as-child>
-          <button class="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-gray-100 transition-colors">
-            <Avatar
-              :alt="user.name"
-              size="sm"
-            />
-            <span class="hidden sm:block text-sm font-medium text-foreground">{{ user.name }}</span>
-          </button>
-        </DropdownMenuTrigger>
+    <!-- Right: User Menu (simple CSS dropdown) -->
+    <div class="relative">
+      <button
+        @click="toggleMenu"
+        class="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-gray-100 transition-colors"
+      >
+        <div class="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xs font-medium shrink-0">
+          {{ (user.name || 'U').charAt(0).toUpperCase() }}
+        </div>
+        <span class="hidden sm:block text-sm font-medium text-foreground">{{ user.name || 'User' }}</span>
+        <ChevronDown class="h-3.5 w-3.5 text-muted-foreground hidden sm:block" />
+      </button>
 
-        <DropdownMenuPortal>
-          <DropdownMenuContent
-            align="end"
-            :side-offset="4"
-            class="z-50 min-w-[200px] overflow-hidden rounded-lg border border-border bg-white p-1 shadow-md"
-          >
-            <div class="px-2 py-1.5">
-              <p class="text-sm font-medium text-foreground">{{ user.name }}</p>
-              <p class="text-xs text-muted">{{ user.email }}</p>
-            </div>
-            <DropdownMenuSeparator class="-mx-1 my-1 h-px bg-border" />
-            <DropdownMenuItem
-              @select="router.get(route('profile.edit'))"
-              class="relative flex cursor-pointer select-none items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none focus:bg-gray-100 focus:text-foreground"
-            >
-              <User class="h-4 w-4" />
-              Profile
-            </DropdownMenuItem>
-            <DropdownMenuSeparator class="-mx-1 my-1 h-px bg-border" />
-            <DropdownMenuItem
-              @select="logout"
-              class="relative flex cursor-pointer select-none items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none text-danger focus:bg-danger-light focus:text-danger"
-            >
-              <LogOut class="h-4 w-4" />
-              Log Out
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenuPortal>
-      </DropdownMenuRoot>
+      <!-- Dropdown menu -->
+      <div
+        v-if="menuOpen"
+        class="absolute right-0 top-full mt-1 z-50 min-w-[200px] rounded-lg border border-border bg-white p-1 shadow-md"
+      >
+        <div class="px-2 py-1.5 border-b border-border mb-1">
+          <p class="text-sm font-medium text-foreground">{{ user.name || 'User' }}</p>
+          <p class="text-xs text-muted">{{ user.email || '' }}</p>
+        </div>
+        <Link
+          :href="route('profile.edit')"
+          class="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-foreground hover:bg-gray-100 transition-colors"
+          @click="closeMenu"
+        >
+          <User class="h-4 w-4" />
+          Profile
+        </Link>
+        <button
+          @click="logout"
+          class="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-danger hover:bg-danger-light w-full text-left transition-colors"
+        >
+          <LogOut class="h-4 w-4" />
+          Log Out
+        </button>
+      </div>
+
+      <!-- Backdrop to close menu -->
+      <div
+        v-if="menuOpen"
+        class="fixed inset-0 z-40"
+        @click="closeMenu"
+      />
     </div>
   </header>
 </template>

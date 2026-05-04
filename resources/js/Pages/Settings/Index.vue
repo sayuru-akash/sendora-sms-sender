@@ -61,7 +61,7 @@ const dateFormatOptions = [
 ];
 
 function saveGeneral() {
-  generalForm.post(route('settings.update'), {
+  generalForm.put(route('settings.update'), {
     onSuccess: () => toast.success('Settings saved'),
   });
 }

@@ -4,7 +4,6 @@ import { TabsContent } from 'reka-ui';
 
 defineProps<{
   value: string;
-  class?: string;
 }>();
 </script>
 

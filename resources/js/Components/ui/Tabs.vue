@@ -5,7 +5,6 @@ import { TabsRoot, TabsList, TabsTrigger, TabsContent } from 'reka-ui';
 defineProps<{
   defaultValue?: string;
   modelValue?: string;
-  class?: string;
 }>();
 
 defineEmits<{

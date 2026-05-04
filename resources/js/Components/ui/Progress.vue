@@ -5,7 +5,6 @@ import { computed } from 'vue';
 const props = defineProps<{
   value?: number;
   max?: number;
-  class?: string;
   indicatorClass?: string;
   size?: 'sm' | 'default' | 'lg';
 }>();

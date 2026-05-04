@@ -2,9 +2,7 @@
 import { cn } from '@/lib/utils';
 import { DropdownMenuSeparator } from 'reka-ui';
 
-defineProps<{
-  class?: string;
-}>();
+defineProps<{}>();
 </script>
 
 <template>

@@ -2,13 +2,13 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Str;
 
 class ListModel extends Model
@@ -26,6 +26,8 @@ class ListModel extends Model
         'created_by',
     ];
 
+    protected $appends = ['color'];
+
     protected static function boot()
     {
         parent::boot();
@@ -37,7 +39,7 @@ class ListModel extends Model
         });
 
         static::updating(function ($list) {
-            if ($list->isDirty('name') && !$list->isDirty('slug')) {
+            if ($list->isDirty('name') && ! $list->isDirty('slug')) {
                 $list->slug = Str::slug($list->name);
             }
         });
@@ -69,6 +71,11 @@ class ListModel extends Model
     public function imports(): HasMany
     {
         return $this->hasMany(Import::class, 'list_id');
+    }
+
+    public function getColorAttribute(): string
+    {
+        return $this->colour;
     }
 
     public function getContactCountAttribute(): int

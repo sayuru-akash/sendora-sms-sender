@@ -19,7 +19,6 @@ const props = withDefaults(
     side?: 'left' | 'right' | 'top' | 'bottom';
     title?: string;
     description?: string;
-    class?: string;
     contentClass?: string;
   }>(),
   {

@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\UserRequest;
 use App\Models\User;
-use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Inertia\Inertia;
@@ -18,11 +17,10 @@ class UserController extends Controller
             ->when($request->role, fn ($q, $role) => $q->where('role', $role))
             ->when($request->status, fn ($q, $status) => $q->where('status', $status))
             ->latest()
-            ->paginate($request->get('per_page', 25));
+            ->get();
 
         return Inertia::render('Users/Index', [
             'users' => $users,
-            'filters' => $request->only(['search', 'role', 'status', 'per_page']),
         ]);
     }
 

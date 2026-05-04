@@ -36,7 +36,7 @@ const form = useForm({
   name: '',
   sender_id: props.default_sender_id,
   message_body: '',
-  target_type: 'all',
+  target_type: 'all_contacts',
   list_ids: [] as number[],
   tag_ids: [] as number[],
   contact_ids: [] as number[],
@@ -55,9 +55,9 @@ const steps = [
 ];
 
 const targetOptions = [
-  { label: 'All Contacts', value: 'all' },
-  { label: 'By Lists', value: 'lists' },
-  { label: 'By Tags', value: 'tags' },
+  { label: 'All Contacts', value: 'all_contacts' },
+  { label: 'By Lists', value: 'list' },
+  { label: 'By Tags', value: 'tag' },
 ];
 
 function nextStep() {
@@ -88,11 +88,38 @@ function insertVariable(key: string) {
 }
 
 function submit() {
-  form.post(route('campaigns.store'));
+  form.transform((data) => ({
+    name: data.name,
+    sender_id: data.sender_id,
+    message_body: data.message_body,
+    target_type: data.target_type,
+    target_filters: {
+      list_ids: data.target_type === 'list' ? data.list_ids : undefined,
+      tag_ids: data.target_type === 'tag' ? data.tag_ids : undefined,
+      contact_ids: data.contact_ids.length ? data.contact_ids : undefined,
+    },
+    template_id: data.template_id,
+    notes: data.notes,
+    scheduled_at: data.schedule_enabled ? data.scheduled_at : undefined,
+    status: data.schedule_enabled ? 'scheduled' : 'draft',
+  })).post(route('campaigns.store'));
 }
 
 function saveDraft() {
-  form.transform((data) => ({ ...data, status: 'draft' })).post(route('campaigns.store'));
+  form.transform((data) => ({
+    name: data.name,
+    sender_id: data.sender_id,
+    message_body: data.message_body,
+    target_type: data.target_type,
+    target_filters: {
+      list_ids: data.target_type === 'list' ? data.list_ids : undefined,
+      tag_ids: data.target_type === 'tag' ? data.tag_ids : undefined,
+      contact_ids: data.contact_ids.length ? data.contact_ids : undefined,
+    },
+    template_id: data.template_id,
+    notes: data.notes,
+    status: 'draft',
+  })).post(route('campaigns.store'));
 }
 </script>
 
@@ -190,7 +217,7 @@ function saveDraft() {
           </div>
         </div>
 
-        <div v-if="form.target_type === 'lists'" class="space-y-1.5">
+        <div v-if="form.target_type === 'list'" class="space-y-1.5">
           <Label>Select Lists</Label>
           <div class="flex flex-wrap gap-2 p-3 rounded-lg border border-border bg-white min-h-[44px]">
             <label v-for="list in lists" :key="list.id" class="inline-flex items-center gap-1.5 cursor-pointer">
@@ -200,7 +227,7 @@ function saveDraft() {
           </div>
         </div>
 
-        <div v-if="form.target_type === 'tags'" class="space-y-1.5">
+        <div v-if="form.target_type === 'tag'" class="space-y-1.5">
           <Label>Select Tags</Label>
           <div class="flex flex-wrap gap-2 p-3 rounded-lg border border-border bg-white min-h-[44px]">
             <label v-for="tag in tags" :key="tag.id" class="inline-flex items-center gap-1.5 cursor-pointer">

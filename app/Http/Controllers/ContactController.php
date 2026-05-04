@@ -5,8 +5,8 @@ namespace App\Http\Controllers;
 use App\Http\Requests\BulkActionRequest;
 use App\Http\Requests\ContactRequest;
 use App\Models\Contact;
-use App\Models\Tag;
 use App\Models\ListModel;
+use App\Models\Tag;
 use App\Services\ActivityLogger;
 use App\Services\PhoneNormalizer;
 use Illuminate\Http\JsonResponse;
@@ -45,7 +45,7 @@ class ContactController extends Controller
             $query->orderBy($sortBy, $sortDir === 'asc' ? 'asc' : 'desc');
         }
 
-        $contacts = $query->paginate($request->get('per_page', 25));
+        $contacts = $this->paginate($query, $request, 25);
 
         $tags = Tag::orderBy('name')->get(['id', 'name', 'colour']);
         $lists = ListModel::active()->orderBy('name')->get(['id', 'name', 'colour']);
@@ -78,7 +78,7 @@ class ContactController extends Controller
                 'uuid' => Str::uuid(),
                 'first_name' => $request->first_name,
                 'last_name' => $request->last_name,
-                'full_name' => $request->full_name ?? trim(($request->first_name ?? '') . ' ' . ($request->last_name ?? '')),
+                'full_name' => $request->full_name ?? trim(($request->first_name ?? '').' '.($request->last_name ?? '')),
                 'phone' => $request->phone,
                 'phone_normalised' => $normalised,
                 'email' => $request->email,
@@ -119,10 +119,60 @@ class ContactController extends Controller
 
     public function show(Contact $contact): Response
     {
-        $contact->load(['tags', 'lists', 'campaignRecipients.campaign', 'smsMessages']);
+        $contact->load(['tags', 'lists']);
+
+        $campaigns = $contact->campaignRecipients()
+            ->with('campaign')
+            ->get()
+            ->map(fn ($recipient) => [
+                'id' => $recipient->campaign->id,
+                'name' => $recipient->campaign->name,
+                'status' => $recipient->campaign->status,
+                'total_recipients' => $recipient->campaign->total_recipients,
+                'sent_count' => $recipient->campaign->sent_count,
+                'failed_count' => $recipient->campaign->failed_count,
+                'success_rate' => $recipient->campaign->success_rate,
+                'target_type' => $recipient->campaign->target_type,
+                'target_config' => $recipient->campaign->target_config,
+                'sender_id' => $recipient->campaign->sender_id,
+                'message_body' => $recipient->campaign->message_body,
+                'template_id' => $recipient->campaign->template_id,
+                'template_name' => $recipient->campaign->template_name,
+                'total_recipients' => $recipient->campaign->total_recipients,
+                'sent_count' => $recipient->campaign->sent_count,
+                'failed_count' => $recipient->campaign->failed_count,
+                'skipped_count' => $recipient->campaign->skipped_count,
+                'pending_count' => $recipient->campaign->pending_count,
+                'success_rate' => $recipient->campaign->success_rate,
+                'scheduled_at' => $recipient->campaign->scheduled_at?->toISOString(),
+                'started_at' => $recipient->campaign->started_at?->toISOString(),
+                'completed_at' => $recipient->campaign->completed_at?->toISOString(),
+                'created_by' => $recipient->campaign->created_by,
+                'created_by_name' => $recipient->campaign->created_by_name,
+                'notes' => $recipient->campaign->notes,
+                'created_at' => $recipient->campaign->created_at?->toISOString(),
+                'updated_at' => $recipient->campaign->updated_at?->toISOString(),
+            ])
+            ->unique('id')
+            ->values();
+
+        $smsHistory = $contact->smsMessages()
+            ->latest()
+            ->limit(50)
+            ->get()
+            ->map(fn ($sms) => [
+                'id' => $sms->id,
+                'message' => $sms->message_body,
+                'status' => $sms->status,
+                'campaign_name' => $sms->campaign?->name,
+                'sent_at' => $sms->sent_at?->toISOString(),
+                'created_at' => $sms->created_at?->toISOString(),
+            ]);
 
         return Inertia::render('Contacts/Show', [
             'contact' => $contact,
+            'campaigns' => $campaigns,
+            'sms_history' => $smsHistory,
         ]);
     }
 
@@ -147,7 +197,7 @@ class ContactController extends Controller
             $contact->update([
                 'first_name' => $request->first_name,
                 'last_name' => $request->last_name,
-                'full_name' => $request->full_name ?? trim(($request->first_name ?? '') . ' ' . ($request->last_name ?? '')),
+                'full_name' => $request->full_name ?? trim(($request->first_name ?? '').' '.($request->last_name ?? '')),
                 'phone' => $request->phone,
                 'phone_normalised' => $normalised,
                 'email' => $request->email,
@@ -198,6 +248,20 @@ class ContactController extends Controller
             ->with('success', 'Contact deleted successfully.');
     }
 
+    public function block(Request $request, Contact $contact)
+    {
+        $contact->update(['status' => 'blocked', 'blocked_at' => now()]);
+
+        $this->activityLogger->logContactUpdated($contact);
+
+        if ($request->expectsJson()) {
+            return response()->json(['contact' => $contact->fresh()]);
+        }
+
+        return redirect()->route('contacts.show', $contact)
+            ->with('success', 'Contact blocked successfully.');
+    }
+
     /**
      * Bulk actions on contacts.
      */
@@ -209,7 +273,7 @@ class ContactController extends Controller
         switch ($action) {
             case 'delete':
                 Contact::whereIn('id', $contactIds)->delete();
-                $message = count($contactIds) . ' contact(s) deleted.';
+                $message = count($contactIds).' contact(s) deleted.';
                 break;
 
             case 'tag':
@@ -220,7 +284,7 @@ class ContactController extends Controller
                         $contact->tags()->syncWithoutDetaching($tagIds);
                     }
                 }
-                $message = 'Tags applied to ' . count($contactIds) . ' contact(s).';
+                $message = 'Tags applied to '.count($contactIds).' contact(s).';
                 break;
 
             case 'untag':
@@ -231,7 +295,7 @@ class ContactController extends Controller
                         $contact->tags()->detach($tagIds);
                     }
                 }
-                $message = 'Tags removed from ' . count($contactIds) . ' contact(s).';
+                $message = 'Tags removed from '.count($contactIds).' contact(s).';
                 break;
 
             case 'add_to_list':
@@ -240,7 +304,7 @@ class ContactController extends Controller
                 if ($list) {
                     $list->contacts()->syncWithoutDetaching($contactIds);
                 }
-                $message = count($contactIds) . ' contact(s) added to list.';
+                $message = count($contactIds).' contact(s) added to list.';
                 break;
 
             case 'remove_from_list':
@@ -249,7 +313,7 @@ class ContactController extends Controller
                 if ($list) {
                     $list->contacts()->detach($contactIds);
                 }
-                $message = count($contactIds) . ' contact(s) removed from list.';
+                $message = count($contactIds).' contact(s) removed from list.';
                 break;
 
             case 'update_status':
@@ -263,7 +327,7 @@ class ContactController extends Controller
                 }
 
                 Contact::whereIn('id', $contactIds)->update($updateData);
-                $message = count($contactIds) . ' contact(s) updated to ' . $status . '.';
+                $message = count($contactIds).' contact(s) updated to '.$status.'.';
                 break;
 
             default:
@@ -292,7 +356,7 @@ class ContactController extends Controller
 
         $headers = [
             'Content-Type' => 'text/csv',
-            'Content-Disposition' => 'attachment; filename="contacts_export_' . now()->format('Y-m_d_His') . '.csv"',
+            'Content-Disposition' => 'attachment; filename="contacts_export_'.now()->format('Y-m_d_His').'.csv"',
         ];
 
         return response()->stream(function () use ($query) {

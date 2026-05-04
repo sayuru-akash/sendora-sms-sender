@@ -2,11 +2,11 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Str;
 
 class Tag extends Model
@@ -21,6 +21,8 @@ class Tag extends Model
         'created_by',
     ];
 
+    protected $appends = ['color'];
+
     // Auto-generate slug
     protected static function boot()
     {
@@ -33,7 +35,7 @@ class Tag extends Model
         });
 
         static::updating(function ($tag) {
-            if ($tag->isDirty('name') && !$tag->isDirty('slug')) {
+            if ($tag->isDirty('name') && ! $tag->isDirty('slug')) {
                 $tag->slug = Str::slug($tag->name);
             }
         });
@@ -55,6 +57,11 @@ class Tag extends Model
     public function contacts(): BelongsToMany
     {
         return $this->belongsToMany(Contact::class, 'contact_tag', 'tag_id', 'contact_id')->withTimestamps();
+    }
+
+    public function getColorAttribute(): string
+    {
+        return $this->colour;
     }
 
     public function getContactCountAttribute(): int

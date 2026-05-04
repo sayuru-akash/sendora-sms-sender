@@ -4,7 +4,6 @@ import { cn } from '@/lib/utils';
 defineProps<{
   name: string;
   color?: string;
-  class?: string;
 }>();
 </script>
 

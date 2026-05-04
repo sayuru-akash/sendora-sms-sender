@@ -8,7 +8,6 @@ const props = withDefaults(
     modelValue?: string;
     placeholder?: string;
     debounce?: number;
-    class?: string;
   }>(),
   {
     placeholder: 'Search...',

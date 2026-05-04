@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\ListRequest;
 use App\Models\ListModel;
+use App\Models\SmsCampaign;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -17,11 +18,10 @@ class ListController extends Controller
         $lists = ListModel::withCount('contacts')
             ->when($request->search, fn ($q, $search) => $q->search($search))
             ->orderBy($request->get('sort_by', 'name'), $request->get('sort_dir', 'asc'))
-            ->paginate($request->get('per_page', 25));
+            ->get();
 
         return Inertia::render('Lists/Index', [
             'lists' => $lists,
-            'filters' => $request->only(['search', 'sort_by', 'sort_dir', 'per_page']),
         ]);
     }
 
@@ -35,7 +35,7 @@ class ListController extends Controller
         $list = ListModel::create([
             'name' => $request->name,
             'description' => $request->description,
-            'colour' => $request->colour,
+            'colour' => $request->input('colour', $request->input('color')),
             'status' => $request->status ?? 'active',
             'created_by' => $request->user()->id,
         ]);
@@ -50,13 +50,47 @@ class ListController extends Controller
 
     public function show(ListModel $list, Request $request): Response
     {
-        $contacts = $list->contacts()
-            ->when($request->search, fn ($q, $search) => $q->search($search))
-            ->paginate($request->get('per_page', 25));
+        $contacts = $this->paginate(
+            $list->contacts()
+                ->when($request->search, fn ($q, $search) => $q->search($search)),
+            $request,
+            25
+        );
+
+        $campaigns = SmsCampaign::whereJsonContains('target_filters->list_ids', $list->id)
+            ->latest()
+            ->limit(10)
+            ->get()
+            ->map(fn ($campaign) => [
+                'id' => $campaign->id,
+                'name' => $campaign->name,
+                'status' => $campaign->status,
+                'total_recipients' => $campaign->total_recipients,
+                'sent_count' => $campaign->sent_count,
+                'failed_count' => $campaign->failed_count,
+                'success_rate' => $campaign->success_rate,
+                'target_type' => $campaign->target_type,
+                'target_config' => $campaign->target_config,
+                'sender_id' => $campaign->sender_id,
+                'message_body' => $campaign->message_body,
+                'template_id' => $campaign->template_id,
+                'template_name' => $campaign->template_name,
+                'skipped_count' => $campaign->skipped_count,
+                'pending_count' => $campaign->pending_count,
+                'scheduled_at' => $campaign->scheduled_at?->toISOString(),
+                'started_at' => $campaign->started_at?->toISOString(),
+                'completed_at' => $campaign->completed_at?->toISOString(),
+                'created_by' => $campaign->created_by,
+                'created_by_name' => $campaign->created_by_name,
+                'notes' => $campaign->notes,
+                'created_at' => $campaign->created_at?->toISOString(),
+                'updated_at' => $campaign->updated_at?->toISOString(),
+            ]);
 
         return Inertia::render('Lists/Show', [
             'list' => $list,
             'contacts' => $contacts,
+            'campaigns' => $campaigns,
         ]);
     }
 
@@ -72,7 +106,7 @@ class ListController extends Controller
         $list->update([
             'name' => $request->name,
             'description' => $request->description,
-            'colour' => $request->colour,
+            'colour' => $request->input('colour', $request->input('color')),
             'status' => $request->status,
         ]);
 
@@ -109,7 +143,7 @@ class ListController extends Controller
         $list->contacts()->syncWithoutDetaching($request->contact_ids);
 
         return response()->json([
-            'message' => count($request->contact_ids) . ' contact(s) added to list.',
+            'message' => count($request->contact_ids).' contact(s) added to list.',
         ]);
     }
 
@@ -126,7 +160,7 @@ class ListController extends Controller
         $list->contacts()->detach($request->contact_ids);
 
         return response()->json([
-            'message' => count($request->contact_ids) . ' contact(s) removed from list.',
+            'message' => count($request->contact_ids).' contact(s) removed from list.',
         ]);
     }
 
@@ -137,7 +171,7 @@ class ListController extends Controller
     {
         $headers = [
             'Content-Type' => 'text/csv',
-            'Content-Disposition' => 'attachment; filename="' . $list->slug . '_contacts_' . now()->format('Y-m_d_His') . '.csv"',
+            'Content-Disposition' => 'attachment; filename="'.$list->slug.'_contacts_'.now()->format('Y-m_d_His').'.csv"',
         ];
 
         return response()->stream(function () use ($list) {

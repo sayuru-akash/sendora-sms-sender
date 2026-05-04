@@ -2,18 +2,18 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use Illuminate\Database\Eloquent\Builder;
 use Spatie\Activitylog\Models\Concerns\LogsActivity;
 use Spatie\Activitylog\Support\LogOptions;
 
 class SmsCampaign extends Model
 {
-    use HasFactory, SoftDeletes, LogsActivity;
+    use HasFactory, LogsActivity, SoftDeletes;
 
     protected $table = 'sms_campaigns';
 
@@ -24,6 +24,7 @@ class SmsCampaign extends Model
         'sender_id',
         'target_type',
         'target_filters',
+        'template_id',
         'status',
         'scheduled_at',
         'started_at',
@@ -36,7 +37,10 @@ class SmsCampaign extends Model
         'pending_count',
         'created_by',
         'approved_by',
+        'notes',
     ];
+
+    protected $appends = ['success_rate', 'target_config', 'created_by_name'];
 
     protected function casts(): array
     {
@@ -152,21 +156,51 @@ class SmsCampaign extends Model
 
     public function getSuccessRateAttribute(): float
     {
-        if ($this->total_recipients === 0) return 0;
+        if (! $this->total_recipients) {
+            return 0;
+        }
+
         return round(($this->sent_count / $this->total_recipients) * 100, 1);
+    }
+
+    public function getTargetConfigAttribute(): ?array
+    {
+        return $this->target_filters;
+    }
+
+    public function getCreatedByNameAttribute(): ?string
+    {
+        return $this->creator?->name;
+    }
+
+    public function getTemplateNameAttribute(): ?string
+    {
+        if (! $this->template_id) {
+            return null;
+        }
+
+        return SmsTemplate::find($this->template_id)?->name;
     }
 
     public function getFailureRateAttribute(): float
     {
-        if ($this->total_recipients === 0) return 0;
+        if (! $this->total_recipients) {
+            return 0;
+        }
+
         return round(($this->failed_count / $this->total_recipients) * 100, 1);
     }
 
     public function getSmsSegmentEstimateAttribute(): int
     {
         $length = mb_strlen($this->message_body);
-        if ($length <= 160) return 1;
-        if ($length <= 306) return 2;
+        if ($length <= 160) {
+            return 1;
+        }
+        if ($length <= 306) {
+            return 2;
+        }
+
         return (int) ceil($length / 153);
     }
 

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\TagRequest;
+use App\Models\SmsCampaign;
 use App\Models\Tag;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -15,11 +16,10 @@ class TagController extends Controller
         $tags = Tag::withCount('contacts')
             ->when($request->search, fn ($q, $search) => $q->search($search))
             ->orderBy($request->get('sort_by', 'name'), $request->get('sort_dir', 'asc'))
-            ->paginate($request->get('per_page', 25));
+            ->get();
 
         return Inertia::render('Tags/Index', [
             'tags' => $tags,
-            'filters' => $request->only(['search', 'sort_by', 'sort_dir', 'per_page']),
         ]);
     }
 
@@ -32,7 +32,7 @@ class TagController extends Controller
     {
         $tag = Tag::create([
             'name' => $request->name,
-            'colour' => $request->colour,
+            'colour' => $request->input('colour', $request->input('color')),
             'description' => $request->description,
             'created_by' => $request->user()->id,
         ]);
@@ -47,13 +47,47 @@ class TagController extends Controller
 
     public function show(Tag $tag, Request $request): Response
     {
-        $contacts = $tag->contacts()
-            ->when($request->search, fn ($q, $search) => $q->search($search))
-            ->paginate($request->get('per_page', 25));
+        $contacts = $this->paginate(
+            $tag->contacts()
+                ->when($request->search, fn ($q, $search) => $q->search($search)),
+            $request,
+            25
+        );
+
+        $campaigns = SmsCampaign::whereJsonContains('target_filters->tag_ids', $tag->id)
+            ->latest()
+            ->limit(10)
+            ->get()
+            ->map(fn ($campaign) => [
+                'id' => $campaign->id,
+                'name' => $campaign->name,
+                'status' => $campaign->status,
+                'total_recipients' => $campaign->total_recipients,
+                'sent_count' => $campaign->sent_count,
+                'failed_count' => $campaign->failed_count,
+                'success_rate' => $campaign->success_rate,
+                'target_type' => $campaign->target_type,
+                'target_config' => $campaign->target_config,
+                'sender_id' => $campaign->sender_id,
+                'message_body' => $campaign->message_body,
+                'template_id' => $campaign->template_id,
+                'template_name' => $campaign->template_name,
+                'skipped_count' => $campaign->skipped_count,
+                'pending_count' => $campaign->pending_count,
+                'scheduled_at' => $campaign->scheduled_at?->toISOString(),
+                'started_at' => $campaign->started_at?->toISOString(),
+                'completed_at' => $campaign->completed_at?->toISOString(),
+                'created_by' => $campaign->created_by,
+                'created_by_name' => $campaign->created_by_name,
+                'notes' => $campaign->notes,
+                'created_at' => $campaign->created_at?->toISOString(),
+                'updated_at' => $campaign->updated_at?->toISOString(),
+            ]);
 
         return Inertia::render('Tags/Show', [
             'tag' => $tag,
             'contacts' => $contacts,
+            'campaigns' => $campaigns,
         ]);
     }
 
@@ -68,7 +102,7 @@ class TagController extends Controller
     {
         $tag->update([
             'name' => $request->name,
-            'colour' => $request->colour,
+            'colour' => $request->input('colour', $request->input('color')),
             'description' => $request->description,
         ]);
 

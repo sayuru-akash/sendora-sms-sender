@@ -94,7 +94,7 @@ function submit() {
     fileError.value = 'Please select a file to upload.';
     return;
   }
-  form.post(route('imports.store'));
+  form.post(route('imports.upload'));
 }
 </script>
 

@@ -17,11 +17,10 @@ class SmsTemplateController extends Controller
             ->when($request->category, fn ($q, $category) => $q->byCategory($category))
             ->when($request->status, fn ($q, $status) => $q->where('status', $status))
             ->latest()
-            ->paginate($request->get('per_page', 25));
+            ->get();
 
         return Inertia::render('Templates/Index', [
             'templates' => $templates,
-            'filters' => $request->only(['search', 'category', 'status', 'per_page']),
         ]);
     }
 
@@ -101,7 +100,7 @@ class SmsTemplateController extends Controller
     public function duplicate(Request $request, SmsTemplate $template)
     {
         $newTemplate = $template->replicate();
-        $newTemplate->name = $template->name . ' (Copy)';
+        $newTemplate->name = $template->name.' (Copy)';
         $newTemplate->created_by = $request->user()->id;
         $newTemplate->save();
 

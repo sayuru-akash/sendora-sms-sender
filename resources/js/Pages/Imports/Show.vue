@@ -24,7 +24,7 @@ const importData = computed(() => props.import);
 const imp = props.import;
 
 function downloadFailedRows() {
-  window.open(route('imports.failed-rows', props.import.id));
+  window.open(route('imports.download-failed', props.import.id));
 }
 
 const stats = [
