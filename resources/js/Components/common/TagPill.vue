@@ -17,7 +17,7 @@ defineEmits<{
   <span
     :class="
       cn(
-        'inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium border',
+        'inline-flex max-w-full items-center gap-1 overflow-hidden text-ellipsis whitespace-nowrap rounded-full border px-2.5 py-0.5 text-xs font-medium',
         color ?? 'bg-gray-100 text-gray-700 border-gray-200',
         $attrs.class as string
       )

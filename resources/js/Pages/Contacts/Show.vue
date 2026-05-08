@@ -26,6 +26,7 @@ import {
   Calendar,
   MessageSquare,
   FileText,
+  User,
 } from 'lucide-vue-next';
 import type { Contact } from '@/types/contact';
 import type { Campaign } from '@/types/campaign';
@@ -72,6 +73,8 @@ async function handleBlock() {
 }
 
 const contactFields = [
+  { icon: User, label: 'First Name', value: props.contact.first_name },
+  { icon: User, label: 'Last Name', value: props.contact.last_name },
   { icon: Phone, label: 'Phone', value: props.contact.phone },
   { icon: Mail, label: 'Email', value: props.contact.email },
   { icon: Building2, label: 'Company', value: props.contact.company },

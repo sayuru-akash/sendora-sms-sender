@@ -6,6 +6,7 @@ import SearchInput from '@/Components/common/SearchInput.vue';
 import StatusBadge from '@/Components/common/StatusBadge.vue';
 import TagPill from '@/Components/common/TagPill.vue';
 import ListBadge from '@/Components/common/ListBadge.vue';
+import BadgeOverflowPopover from '@/Components/common/BadgeOverflowPopover.vue';
 import FilterDrawer from '@/Components/common/FilterDrawer.vue';
 import DataTable from '@/Components/common/DataTable.vue';
 import Button from '@/Components/ui/Button.vue';
@@ -119,9 +120,30 @@ function exportContacts() {
 
 const columnHelper = createColumnHelper<Contact>();
 
+function orderedTags(tags: TagType[]) {
+  return [...tags].sort((first, second) => tagPriority(first.name) - tagPriority(second.name));
+}
+
+function tagPriority(name: string) {
+  if (/^CCB-[A-Z]+26$/.test(name)) {
+    return 0;
+  }
+
+  if (name === 'CCB - 26.1') {
+    return 1;
+  }
+
+  if (name === 'CCB') {
+    return 2;
+  }
+
+  return 3;
+}
+
 const columns = [
   columnHelper.accessor('full_name', {
     header: 'Name',
+    size: 230,
     cell: (info) => {
       const contact = info.row.original;
       return h('div', { class: 'flex items-center gap-3' }, [
@@ -136,36 +158,63 @@ const columns = [
   }),
   columnHelper.accessor('phone', {
     header: 'Phone',
+    size: 125,
     cell: (info) => h('span', { class: 'text-sm text-foreground' }, info.getValue()),
   }),
   columnHelper.accessor('company', {
     header: 'Company',
+    size: 95,
     cell: (info) => h('span', { class: 'text-sm text-muted' }, info.getValue() ?? '—'),
   }),
   columnHelper.display({
     id: 'lists',
     header: 'Lists',
+    size: 120,
     cell: (info) => {
       const lists = info.row.original.lists;
       if (!lists?.length) return h('span', { class: 'text-xs text-muted-foreground' }, '—');
-      return h('div', { class: 'flex flex-wrap gap-1' },
-        lists.slice(0, 2).map((l) => h(ListBadge, { name: l.name }))
-      );
+      const visibleLists = lists.slice(0, 1);
+      const hiddenLists = lists.slice(1);
+
+      return h('div', { class: 'flex max-w-[8rem] flex-wrap items-center gap-1.5' }, [
+        ...visibleLists.map((list) => h(ListBadge, {
+          name: list.name,
+          class: 'max-w-[7rem] shrink-0',
+        })),
+        hiddenLists.length ? h(BadgeOverflowPopover, {
+          items: hiddenLists,
+          title: 'More lists',
+          tone: 'list',
+        }) : null,
+      ]);
     },
   }),
   columnHelper.display({
     id: 'tags',
     header: 'Tags',
+    size: 230,
     cell: (info) => {
-      const tags = info.row.original.tags;
+      const tags = orderedTags(info.row.original.tags ?? []);
       if (!tags?.length) return h('span', { class: 'text-xs text-muted-foreground' }, '—');
-      return h('div', { class: 'flex flex-wrap gap-1' },
-        tags.slice(0, 2).map((t) => h(TagPill, { name: t.name }))
-      );
+      const visibleTags = tags.slice(0, 2);
+      const hiddenTags = tags.slice(2);
+
+      return h('div', { class: 'flex max-w-[14rem] flex-wrap items-center gap-1.5' }, [
+        ...visibleTags.map((tag) => h(TagPill, {
+          name: tag.name,
+          class: 'max-w-[7.5rem] shrink-0',
+        })),
+        hiddenTags.length ? h(BadgeOverflowPopover, {
+          items: hiddenTags,
+          title: 'More tags',
+          tone: 'tag',
+        }) : null,
+      ]);
     },
   }),
   columnHelper.accessor('status', {
     header: 'Status',
+    size: 90,
     cell: (info) => h(StatusBadge, { status: info.getValue() }),
   }),
   columnHelper.display({

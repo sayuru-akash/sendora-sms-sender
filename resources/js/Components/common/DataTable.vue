@@ -115,7 +115,7 @@ defineExpose({ selectedRows });
     </div>
 
     <!-- Table -->
-    <div class="rounded-xl border border-border bg-white overflow-hidden">
+    <div class="rounded-xl border border-border bg-white overflow-visible">
       <Table>
         <TableHeader>
           <TableRow
@@ -192,6 +192,7 @@ defineExpose({ selectedRows });
               <TableCell
                 v-for="cell in row.getVisibleCells()"
                 :key="cell.id"
+                :style="{ width: cell.column.getSize() ? `${cell.column.getSize()}px` : undefined }"
               >
                 <FlexRender
                   :render="cell.column.columnDef.cell"
