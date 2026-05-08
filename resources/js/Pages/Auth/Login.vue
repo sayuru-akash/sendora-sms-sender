@@ -84,10 +84,7 @@ const submit = () => {
       </Button>
 
       <p class="text-center text-sm text-muted">
-        Don't have an account?
-        <Link :href="route('register')" class="font-medium text-primary hover:text-primary-hover transition-colors">
-          Create one
-        </Link>
+        Accounts are created by an administrator.
       </p>
     </form>
   </GuestLayout>

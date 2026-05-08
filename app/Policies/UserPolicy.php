@@ -23,12 +23,16 @@ class UserPolicy
 
     public function update(User $user, User $model): bool
     {
+        if ($user->id === $model->id) {
+            return false;
+        }
+
         // Owner can update anyone, admin can update non-owner/non-admin
         if ($user->isOwner()) {
             return true;
         }
 
-        return $user->isAdmin() && !$model->isOwner() && !$model->isAdmin();
+        return $user->isAdmin() && ! $model->isOwner() && ! $model->isAdmin();
     }
 
     public function delete(User $user, User $model): bool
@@ -43,6 +47,6 @@ class UserPolicy
             return true;
         }
 
-        return $user->isAdmin() && !$model->isOwner() && !$model->isAdmin();
+        return $user->isAdmin() && ! $model->isOwner() && ! $model->isAdmin();
     }
 }

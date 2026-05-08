@@ -193,9 +193,13 @@ class CampaignController extends Controller
      */
     public function send(CampaignSendRequest $request, SmsCampaign $campaign)
     {
+        $this->authorize('send', $campaign);
+
         if (! $campaign->canBeSent()) {
             abort(422, 'Campaign cannot be sent in its current status: '.$campaign->status);
         }
+
+        $campaign->markQueued();
 
         // Dispatch recipient preparation, then sending chain
         PrepareCampaignRecipients::dispatch($campaign)
@@ -219,6 +223,8 @@ class CampaignController extends Controller
      */
     public function pause(Request $request, SmsCampaign $campaign): JsonResponse|RedirectResponse
     {
+        $this->authorize('pause', $campaign);
+
         if (! $campaign->canBePaused()) {
             abort(422, 'Campaign cannot be paused in its current status.');
         }
@@ -239,6 +245,8 @@ class CampaignController extends Controller
      */
     public function resume(Request $request, SmsCampaign $campaign): JsonResponse|RedirectResponse
     {
+        $this->authorize('resume', $campaign);
+
         if (! $campaign->isPaused()) {
             abort(422, 'Only paused campaigns can be resumed.');
         }
@@ -261,6 +269,8 @@ class CampaignController extends Controller
      */
     public function cancel(Request $request, SmsCampaign $campaign): JsonResponse|RedirectResponse
     {
+        $this->authorize('cancel', $campaign);
+
         if (! $campaign->canBeCancelled()) {
             abort(422, 'Campaign cannot be cancelled in its current status.');
         }
@@ -281,6 +291,8 @@ class CampaignController extends Controller
      */
     public function duplicate(Request $request, SmsCampaign $campaign)
     {
+        $this->authorize('duplicate', $campaign);
+
         $newCampaign = $campaign->replicate();
         $newCampaign->uuid = Str::uuid();
         $newCampaign->status = 'draft';

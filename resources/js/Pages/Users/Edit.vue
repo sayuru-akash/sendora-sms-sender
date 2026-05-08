@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import AppLayout from '@/Components/layout/AppLayout.vue';
 import PageHeader from '@/Components/common/PageHeader.vue';
 import Card from '@/Components/ui/Card.vue';
@@ -7,7 +8,7 @@ import Button from '@/Components/ui/Button.vue';
 import Input from '@/Components/ui/Input.vue';
 import Label from '@/Components/ui/Label.vue';
 import Select from '@/Components/ui/Select.vue';
-import { Head, Link, useForm } from '@inertiajs/vue3';
+import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
 import { Save } from 'lucide-vue-next';
 import type { User } from '@/types';
 import { USER_ROLES } from '@/types/user';
@@ -16,15 +17,19 @@ const props = defineProps<{
   user: User;
 }>();
 
+const page = usePage();
 const form = useForm({
   name: props.user.name,
   email: props.user.email,
   password: '',
+  password_confirmation: '',
   role: props.user.role,
   status: props.user.status,
 });
 
-const roleOptions = USER_ROLES.map((r) => ({ label: r.label, value: r.value }));
+const roleOptions = computed(() => USER_ROLES
+  .filter((role) => page.props.auth.user.role === 'owner' || !['owner', 'admin'].includes(role.value))
+  .map((role) => ({ label: role.label, value: role.value })));
 const statusOptions = [
   { label: 'Active', value: 'active' },
   { label: 'Inactive', value: 'inactive' },
@@ -86,6 +91,10 @@ function submit() {
             <p v-if="form.errors.password" class="text-xs text-danger">{{ form.errors.password }}</p>
             <p v-else class="text-xs text-muted">Leave empty to keep the current password.</p>
           </div>
+          <div class="space-y-1.5">
+            <Label for="password_confirmation">Confirm Password</Label>
+            <Input id="password_confirmation" v-model="form.password_confirmation" type="password" placeholder="Repeat the new password" />
+          </div>
         </CardContent>
       </Card>
 
@@ -96,6 +105,7 @@ function submit() {
             <div class="space-y-1.5">
               <Label>Role</Label>
               <Select v-model="form.role" :options="roleOptions" />
+              <p v-if="form.errors.role" class="text-xs text-danger">{{ form.errors.role }}</p>
             </div>
             <div class="space-y-1.5">
               <Label>Status</Label>

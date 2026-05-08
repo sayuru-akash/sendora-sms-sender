@@ -13,6 +13,8 @@ class UserController extends Controller
 {
     public function index(Request $request): Response
     {
+        $this->authorize('viewAny', User::class);
+
         $users = User::when($request->search, fn ($q, $search) => $q->where('name', 'ilike', "%{$search}%")->orWhere('email', 'ilike', "%{$search}%"))
             ->when($request->role, fn ($q, $role) => $q->where('role', $role))
             ->when($request->status, fn ($q, $status) => $q->where('status', $status))
@@ -26,11 +28,15 @@ class UserController extends Controller
 
     public function create(): Response
     {
+        $this->authorize('create', User::class);
+
         return Inertia::render('Users/Create');
     }
 
     public function store(UserRequest $request)
     {
+        $this->authorize('create', User::class);
+
         $user = User::create([
             'name' => $request->name,
             'email' => $request->email,
@@ -49,6 +55,8 @@ class UserController extends Controller
 
     public function show(User $user): Response
     {
+        $this->authorize('view', $user);
+
         return Inertia::render('Users/Show', [
             'user' => $user,
         ]);
@@ -56,6 +64,8 @@ class UserController extends Controller
 
     public function edit(User $user): Response
     {
+        $this->authorize('update', $user);
+
         return Inertia::render('Users/Edit', [
             'user' => $user,
         ]);
@@ -63,6 +73,8 @@ class UserController extends Controller
 
     public function update(UserRequest $request, User $user)
     {
+        $this->authorize('update', $user);
+
         $data = [
             'name' => $request->name,
             'email' => $request->email,

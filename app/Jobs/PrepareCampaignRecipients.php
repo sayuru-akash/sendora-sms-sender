@@ -8,16 +8,17 @@ use App\Models\SavedSegment;
 use App\Models\SmsCampaign;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
-use Illuminate\Support\Facades\DB;
 
 class PrepareCampaignRecipients implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $tries = 3;
+
     public int $timeout = 1800; // 30 minutes
 
     public function __construct(
@@ -28,24 +29,9 @@ class PrepareCampaignRecipients implements ShouldQueue
     {
         $this->campaign->markQueued();
 
-        $contacts = $this->resolveContacts();
-
-        // Deduplicate by phone_normalised
-        $seen = collect();
-        $uniqueContacts = collect();
-
-        foreach ($contacts as $contact) {
-            if (!$seen->contains($contact->phone_normalised)) {
-                $seen->push($contact->phone_normalised);
-                $uniqueContacts->push($contact);
-            }
-        }
-
-        // Create campaign recipients in batches
         $batch = [];
-        $totalRecipients = 0;
 
-        foreach ($uniqueContacts as $contact) {
+        foreach ($this->resolveContacts()->orderBy('id')->cursor() as $contact) {
             $batch[] = [
                 'campaign_id' => $this->campaign->id,
                 'contact_id' => $contact->id,
@@ -54,33 +40,36 @@ class PrepareCampaignRecipients implements ShouldQueue
                 'created_at' => now(),
                 'updated_at' => now(),
             ];
-            $totalRecipients++;
 
             if (count($batch) >= 500) {
-                CampaignRecipient::insert($batch);
+                CampaignRecipient::insertOrIgnore($batch);
                 $batch = [];
             }
         }
 
-        if (!empty($batch)) {
-            CampaignRecipient::insert($batch);
+        if (! empty($batch)) {
+            CampaignRecipient::insertOrIgnore($batch);
         }
 
-        // Update campaign counts
+        $totalRecipients = CampaignRecipient::where('campaign_id', $this->campaign->id)->count();
+        $pendingRecipients = CampaignRecipient::where('campaign_id', $this->campaign->id)
+            ->where('status', 'pending')
+            ->count();
+
         $this->campaign->update([
             'total_recipients' => $totalRecipients,
-            'pending_count' => $totalRecipients,
+            'pending_count' => $pendingRecipients,
         ]);
     }
 
     /**
      * Resolve contacts based on campaign target type.
-     *
-     * @return \Illuminate\Support\Collection
      */
-    protected function resolveContacts()
+    protected function resolveContacts(): Builder
     {
-        $query = Contact::canReceiveSms();
+        $query = Contact::query()
+            ->select(['id', 'phone_normalised'])
+            ->canReceiveSms();
 
         switch ($this->campaign->target_type) {
             case 'all_contacts':
@@ -89,14 +78,14 @@ class PrepareCampaignRecipients implements ShouldQueue
 
             case 'list':
                 $listIds = $this->campaign->target_filters['list_ids'] ?? [];
-                if (!empty($listIds)) {
+                if (! empty($listIds)) {
                     $query->whereHas('lists', fn ($q) => $q->whereIn('lists.id', $listIds));
                 }
                 break;
 
             case 'tag':
                 $tagIds = $this->campaign->target_filters['tag_ids'] ?? [];
-                if (!empty($tagIds)) {
+                if (! empty($tagIds)) {
                     $query->whereHas('tags', fn ($q) => $q->whereIn('tags.id', $tagIds));
                 }
                 break;
@@ -113,7 +102,7 @@ class PrepareCampaignRecipients implements ShouldQueue
 
             case 'manual_selection':
                 $contactIds = $this->campaign->target_filters['contact_ids'] ?? [];
-                if (!empty($contactIds)) {
+                if (! empty($contactIds)) {
                     $query->whereIn('id', $contactIds);
                 }
                 break;
@@ -124,7 +113,7 @@ class PrepareCampaignRecipients implements ShouldQueue
                 break;
         }
 
-        return $query->get();
+        return $query;
     }
 
     /**
@@ -132,39 +121,39 @@ class PrepareCampaignRecipients implements ShouldQueue
      */
     protected function applySegmentFilters($query, array $filters)
     {
-        if (!empty($filters['status'])) {
+        if (! empty($filters['status'])) {
             $query->where('status', $filters['status']);
         }
 
-        if (!empty($filters['source'])) {
+        if (! empty($filters['source'])) {
             $query->where('source', $filters['source']);
         }
 
-        if (!empty($filters['district'])) {
+        if (! empty($filters['district'])) {
             $query->where('district', $filters['district']);
         }
 
-        if (!empty($filters['city'])) {
+        if (! empty($filters['city'])) {
             $query->where('city', $filters['city']);
         }
 
-        if (!empty($filters['gender'])) {
+        if (! empty($filters['gender'])) {
             $query->where('gender', $filters['gender']);
         }
 
-        if (!empty($filters['date_from'])) {
+        if (! empty($filters['date_from'])) {
             $query->where('created_at', '>=', $filters['date_from']);
         }
 
-        if (!empty($filters['date_to'])) {
+        if (! empty($filters['date_to'])) {
             $query->where('created_at', '<=', $filters['date_to']);
         }
 
-        if (!empty($filters['tag_ids'])) {
+        if (! empty($filters['tag_ids'])) {
             $query->whereHas('tags', fn ($q) => $q->whereIn('tags.id', $filters['tag_ids']));
         }
 
-        if (!empty($filters['list_ids'])) {
+        if (! empty($filters['list_ids'])) {
             $query->whereHas('lists', fn ($q) => $q->whereIn('lists.id', $filters['list_ids']));
         }
 
@@ -181,7 +170,7 @@ class PrepareCampaignRecipients implements ShouldQueue
             $operator = $filter['operator'] ?? '=';
             $value = $filter['value'] ?? null;
 
-            if (!$field || $value === null) {
+            if (! $field || $value === null) {
                 continue;
             }
 
@@ -191,7 +180,7 @@ class PrepareCampaignRecipients implements ShouldQueue
                 'gender', 'source', 'status', 'country',
             ];
 
-            if (!in_array($field, $allowedFields)) {
+            if (! in_array($field, $allowedFields)) {
                 continue;
             }
 

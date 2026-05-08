@@ -357,9 +357,17 @@ class ImportController extends Controller
         if ($type === 'csv') {
             $csv = Reader::createFromPath($fullPath, 'r');
             $csv->setHeaderOffset(0);
-            $records = iterator_to_array($csv->getRecords());
+            $records = [];
 
-            return array_slice($records, 0, $limit);
+            foreach ($csv->getRecords() as $record) {
+                $records[] = $record;
+
+                if (count($records) >= $limit) {
+                    break;
+                }
+            }
+
+            return $records;
         }
 
         // XLSX

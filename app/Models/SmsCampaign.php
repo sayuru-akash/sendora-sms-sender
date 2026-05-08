@@ -141,7 +141,7 @@ class SmsCampaign extends Model
 
     public function canBeSent(): bool
     {
-        return in_array($this->status, ['draft', 'scheduled', 'queued']);
+        return in_array($this->status, ['draft', 'scheduled']);
     }
 
     public function canBePaused(): bool

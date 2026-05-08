@@ -4,10 +4,13 @@ namespace App\Http\Controllers;
 
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\Relation;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\Request;
 
 abstract class Controller
 {
+    use AuthorizesRequests;
+
     /**
      * Format a paginator into a consistent shape for Inertia/Vue consumption.
      * Returns { data: [...], meta: { current_page, last_page, per_page, total, from, to } }

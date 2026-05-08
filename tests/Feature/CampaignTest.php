@@ -6,6 +6,7 @@ use App\Models\Contact;
 use App\Models\SmsCampaign;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
 class CampaignTest extends TestCase
@@ -13,6 +14,7 @@ class CampaignTest extends TestCase
     use RefreshDatabase;
 
     protected User $staff;
+
     protected User $manager;
 
     protected function setUp(): void
@@ -98,6 +100,23 @@ class CampaignTest extends TestCase
         $campaign->markSending();
         $campaign->markCompleted();
         $this->assertTrue($campaign->isCompleted());
+    }
+
+    public function test_queued_campaign_cannot_be_sent_again(): void
+    {
+        Queue::fake();
+
+        $campaign = SmsCampaign::factory()->create(['status' => 'draft']);
+
+        $this->actingAs($this->manager)->postJson("/campaigns/{$campaign->id}/send", [
+            'confirmed' => true,
+        ])->assertOk();
+
+        $this->assertTrue($campaign->fresh()->isQueued());
+
+        $this->actingAs($this->manager)->postJson("/campaigns/{$campaign->id}/send", [
+            'confirmed' => true,
+        ])->assertStatus(422);
     }
 
     public function test_unauthorized_user_cannot_send_campaign(): void
