@@ -35,6 +35,26 @@ const activityLogUrl = computed(() => route('activity-logs.index', {
   subject_type: 'App\\Models\\SmsCampaign',
   subject_id: props.campaign.id,
 }));
+const activityEventBadgeVariant: Record<string, 'default' | 'secondary' | 'success' | 'danger' | 'warning' | 'info' | 'outline'> = {
+  send_requested: 'info',
+  queued: 'info',
+  sending: 'warning',
+  completed: 'success',
+  resend_queued: 'warning',
+  recipient_sent: 'success',
+  recipient_failed: 'danger',
+  failed: 'danger',
+  paused: 'warning',
+  resumed: 'info',
+  cancelled: 'danger',
+};
+
+function formatEventLabel(event: string): string {
+  return event
+    .split('_')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
 
 function pauseCampaign() {
   router.post(route('campaigns.pause', props.campaign.id));
@@ -253,8 +273,10 @@ onBeforeUnmount(() => {
           >
             <div class="min-w-0">
               <p class="text-sm font-medium text-foreground">{{ activity.description }}</p>
-              <p class="mt-1 text-xs text-muted">
-                {{ truncate(activity.event, 24) }}
+              <p class="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted">
+                <Badge :variant="activityEventBadgeVariant[activity.event] ?? 'secondary'">
+                  {{ truncate(formatEventLabel(activity.event), 24) }}
+                </Badge>
                 <span v-if="activity.causer_name"> · {{ activity.causer_name }}</span>
               </p>
             </div>

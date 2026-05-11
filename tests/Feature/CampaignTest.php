@@ -10,11 +10,13 @@ use App\Models\Contact;
 use App\Models\ListModel;
 use App\Models\SmsCampaign;
 use App\Models\User;
+use App\Services\ActivityLogger;
 use App\Services\Sms\MessagePersonalizer;
 use App\Services\Sms\SmsService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
+use Spatie\Activitylog\Models\Activity;
 use Tests\TestCase;
 
 class CampaignTest extends TestCase
@@ -93,6 +95,13 @@ class CampaignTest extends TestCase
         $campaign = SmsCampaign::where('name', 'Immediate Campaign')->firstOrFail();
 
         $this->assertTrue($campaign->isQueued());
+        $activity = Activity::where('subject_type', SmsCampaign::class)
+            ->where('subject_id', $campaign->id)
+            ->where('event', 'send_requested')
+            ->firstOrFail();
+
+        $this->assertSame('Campaign send requested', $activity->description);
+        $this->assertArrayNotHasKey('total_recipients', $activity->properties->toArray());
         Queue::assertPushed(PrepareCampaignRecipients::class);
     }
 
@@ -289,7 +298,11 @@ class CampaignTest extends TestCase
             'status' => 'pending',
         ]);
 
-        (new SendSingleSms($campaign, $recipient))->handle(app(SmsService::class), app(MessagePersonalizer::class));
+        (new SendSingleSms($campaign, $recipient))->handle(
+            app(SmsService::class),
+            app(MessagePersonalizer::class),
+            app(ActivityLogger::class),
+        );
 
         $recipient->refresh();
 
@@ -300,6 +313,15 @@ class CampaignTest extends TestCase
             'message_body' => 'Hi Nimal from Colombo',
             'status' => 'sent',
         ]);
+        $activity = Activity::where('subject_type', SmsCampaign::class)
+            ->where('subject_id', $campaign->id)
+            ->where('event', 'recipient_sent')
+            ->firstOrFail();
+
+        $this->assertSame('Campaign recipient sent', $activity->description);
+        $this->assertSame($recipient->id, $activity->properties['recipient_id']);
+        $this->assertSame('msg123', $activity->properties['provider_message_id']);
+        $this->assertArrayNotHasKey('message_body', $activity->properties->toArray());
 
         Http::assertSent(fn ($request) => $request->data()['msg'] === 'Hi Nimal from Colombo');
     }
@@ -326,7 +348,11 @@ class CampaignTest extends TestCase
             'status' => 'pending',
         ]);
 
-        (new SendSingleSms($campaign, $recipient))->handle(app(SmsService::class), app(MessagePersonalizer::class));
+        (new SendSingleSms($campaign, $recipient))->handle(
+            app(SmsService::class),
+            app(MessagePersonalizer::class),
+            app(ActivityLogger::class),
+        );
 
         $recipient->refresh();
 
@@ -337,6 +363,15 @@ class CampaignTest extends TestCase
             'status' => 'failed',
             'error_message' => 'Message contains unresolved placeholders: amount',
         ]);
+        $activity = Activity::where('subject_type', SmsCampaign::class)
+            ->where('subject_id', $campaign->id)
+            ->where('event', 'recipient_failed')
+            ->firstOrFail();
+
+        $this->assertSame('Campaign recipient failed', $activity->description);
+        $this->assertSame($recipient->id, $activity->properties['recipient_id']);
+        $this->assertSame('Message contains unresolved placeholders: amount', $activity->properties['error_message']);
+        $this->assertArrayNotHasKey('message_body', $activity->properties->toArray());
 
         Http::assertNothingSent();
     }

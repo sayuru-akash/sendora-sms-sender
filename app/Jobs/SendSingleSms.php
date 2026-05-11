@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Models\CampaignRecipient;
 use App\Models\SmsCampaign;
 use App\Models\SmsMessage;
+use App\Services\ActivityLogger;
 use App\Services\Sms\MessagePersonalizer;
 use App\Services\Sms\SmsService;
 use Illuminate\Bus\Queueable;
@@ -27,7 +28,7 @@ class SendSingleSms implements ShouldQueue
         public CampaignRecipient $recipient,
     ) {}
 
-    public function handle(SmsService $smsService, MessagePersonalizer $messagePersonalizer): void
+    public function handle(SmsService $smsService, MessagePersonalizer $messagePersonalizer, ActivityLogger $activityLogger): void
     {
         // Refresh campaign status
         $this->campaign->refresh();
@@ -64,6 +65,8 @@ class SendSingleSms implements ShouldQueue
 
         // Update attempt count
         $this->recipient->increment('attempt_count');
+        $this->recipient->refresh();
+        $this->recipient->loadMissing('contact');
 
         $unresolvedPlaceholders = $messagePersonalizer->unresolvedPlaceholders($messageBody);
         if (! empty($unresolvedPlaceholders)) {
@@ -80,9 +83,11 @@ class SendSingleSms implements ShouldQueue
                 'error_message' => $errorMessage,
                 'failed_at' => now(),
             ]);
+            $smsMessage->refresh();
 
             $this->campaign->increment('failed_count');
             $this->campaign->decrement('pending_count');
+            $activityLogger->logCampaignRecipientFailed($this->campaign, $this->recipient, $smsMessage, $errorMessage);
 
             Log::warning('SMS send blocked due to unresolved placeholders', [
                 'campaign_id' => $this->campaign->id,
@@ -112,10 +117,12 @@ class SendSingleSms implements ShouldQueue
                 'provider_response' => $result->rawResponse,
                 'sent_at' => now(),
             ]);
+            $smsMessage->refresh();
 
             // Update campaign counts
             $this->campaign->increment('sent_count');
             $this->campaign->decrement('pending_count');
+            $activityLogger->logCampaignRecipientSent($this->campaign, $this->recipient, $smsMessage);
         } else {
             // Update recipient
             $this->recipient->update([
@@ -132,10 +139,17 @@ class SendSingleSms implements ShouldQueue
                 'provider_response' => $result->rawResponse,
                 'failed_at' => now(),
             ]);
+            $smsMessage->refresh();
 
             // Update campaign counts
             $this->campaign->increment('failed_count');
             $this->campaign->decrement('pending_count');
+            $activityLogger->logCampaignRecipientFailed(
+                $this->campaign,
+                $this->recipient,
+                $smsMessage,
+                $result->errorMessage ?? 'SMS provider rejected the message.'
+            );
         }
     }
 }

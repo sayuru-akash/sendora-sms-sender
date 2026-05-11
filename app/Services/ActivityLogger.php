@@ -6,7 +6,10 @@ use App\Models\CampaignRecipient;
 use App\Models\Contact;
 use App\Models\Import;
 use App\Models\SmsCampaign;
+use App\Models\SmsMessage;
 use App\Models\User;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Str;
 use Spatie\Activitylog\Models\Activity;
 
 class ActivityLogger
@@ -126,20 +129,20 @@ class ActivityLogger
             ->log('Campaign created');
     }
 
-    /**
-     * Log a campaign sent.
-     */
-    public function logCampaignSent(SmsCampaign $campaign): Activity
+    public function logCampaignSendRequested(SmsCampaign $campaign): Activity
     {
         return activity()
             ->performedOn($campaign)
-            ->causedBy(auth()->user())
-            ->event('sent')
+            ->causedBy($this->campaignCauser($campaign))
+            ->event('send_requested')
             ->withProperties([
                 'name' => $campaign->name,
-                'total_recipients' => $campaign->total_recipients,
+                'status' => $campaign->status,
+                'target_type' => $campaign->target_type,
+                'requested_at' => now()->toIso8601String(),
+                'timezone' => config('app.timezone'),
             ])
-            ->log('Campaign sent');
+            ->log('Campaign send requested');
     }
 
     public function logCampaignQueued(SmsCampaign $campaign): Activity
@@ -198,6 +201,33 @@ class ActivityLogger
                 'timezone' => config('app.timezone'),
             ])
             ->log($recipient ? 'Campaign recipient resend queued' : 'Campaign failed recipients resend queued');
+    }
+
+    public function logCampaignRecipientSent(SmsCampaign $campaign, CampaignRecipient $recipient, SmsMessage $smsMessage): Activity
+    {
+        return activity()
+            ->performedOn($campaign)
+            ->causedBy($this->campaignCauser($campaign))
+            ->event('recipient_sent')
+            ->withProperties([
+                ...$this->campaignRecipientProperties($campaign, $recipient, $smsMessage),
+                'sent_at' => $smsMessage->sent_at?->toIso8601String() ?? now()->toIso8601String(),
+            ])
+            ->log('Campaign recipient sent');
+    }
+
+    public function logCampaignRecipientFailed(SmsCampaign $campaign, CampaignRecipient $recipient, SmsMessage $smsMessage, string $errorMessage): Activity
+    {
+        return activity()
+            ->performedOn($campaign)
+            ->causedBy($this->campaignCauser($campaign))
+            ->event('recipient_failed')
+            ->withProperties([
+                ...$this->campaignRecipientProperties($campaign, $recipient, $smsMessage),
+                'error_message' => Str::limit($errorMessage, 500),
+                'failed_at' => $smsMessage->failed_at?->toIso8601String() ?? now()->toIso8601String(),
+            ])
+            ->log('Campaign recipient failed');
     }
 
     /**
@@ -287,6 +317,32 @@ class ActivityLogger
             'sent_count' => $campaign->sent_count,
             'failed_count' => $campaign->failed_count,
             'skipped_count' => $campaign->skipped_count,
+            'logged_at' => now()->toIso8601String(),
+            'timezone' => config('app.timezone'),
+        ];
+    }
+
+    private function campaignCauser(SmsCampaign $campaign): ?Model
+    {
+        return auth()->user() ?? $campaign->creator;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function campaignRecipientProperties(SmsCampaign $campaign, CampaignRecipient $recipient, SmsMessage $smsMessage): array
+    {
+        return [
+            'name' => $campaign->name,
+            'recipient_id' => $recipient->id,
+            'sms_message_id' => $smsMessage->id,
+            'contact_id' => $recipient->contact_id,
+            'phone' => $recipient->phone_normalised,
+            'attempt_count' => $recipient->attempt_count,
+            'recipient_status' => $recipient->status,
+            'message_status' => $smsMessage->status,
+            'provider' => $smsMessage->provider,
+            'provider_message_id' => $smsMessage->provider_message_id,
             'logged_at' => now()->toIso8601String(),
             'timezone' => config('app.timezone'),
         ];

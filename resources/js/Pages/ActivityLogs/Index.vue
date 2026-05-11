@@ -31,6 +31,9 @@ const eventOptions = [
   { label: 'Deleted', value: 'deleted' },
   { label: 'Restored', value: 'restored' },
   { label: 'Sent', value: 'sent' },
+  { label: 'Send Requested', value: 'send_requested' },
+  { label: 'Recipient Sent', value: 'recipient_sent' },
+  { label: 'Recipient Failed', value: 'recipient_failed' },
   { label: 'Queued', value: 'queued' },
   { label: 'Sending', value: 'sending' },
   { label: 'Completed', value: 'completed' },
@@ -49,6 +52,9 @@ const eventBadgeVariant: Record<string, 'default' | 'secondary' | 'success' | 'd
   deleted: 'danger',
   restored: 'warning',
   sent: 'success',
+  send_requested: 'info',
+  recipient_sent: 'success',
+  recipient_failed: 'danger',
   queued: 'info',
   sending: 'warning',
   completed: 'success',
@@ -92,6 +98,13 @@ function formatPropertyValue(value: unknown): string {
   }
 
   return String(value);
+}
+
+function formatEventLabel(event: string): string {
+  return event
+    .split('_')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
 }
 </script>
 
@@ -147,7 +160,7 @@ function formatPropertyValue(value: unknown): string {
             <p class="text-sm text-foreground">{{ activity.description }}</p>
             <div class="flex flex-wrap items-center gap-2 mt-1.5">
               <Badge :variant="eventBadgeVariant[activity.event] ?? 'secondary'">
-                {{ activity.event }}
+                {{ formatEventLabel(activity.event) }}
               </Badge>
               <span v-if="activity.causer_name" class="text-xs text-muted">
                 by {{ activity.causer_name }}

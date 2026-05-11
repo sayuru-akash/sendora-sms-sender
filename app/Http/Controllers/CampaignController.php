@@ -200,7 +200,7 @@ class CampaignController extends Controller
 
         if ($request->boolean('send_now')) {
             $this->dispatchCampaignSend($campaign);
-            $this->activityLogger->logCampaignSent($campaign);
+            $this->activityLogger->logCampaignSendRequested($campaign->fresh());
 
             if ($request->expectsJson()) {
                 return response()->json(['campaign' => $campaign->fresh(), 'message' => 'Campaign is being processed.'], 201);
@@ -330,7 +330,7 @@ class CampaignController extends Controller
 
         $this->dispatchCampaignSend($campaign);
 
-        $this->activityLogger->logCampaignSent($campaign);
+        $this->activityLogger->logCampaignSendRequested($campaign->fresh());
 
         if ($request->expectsJson()) {
             return response()->json(['message' => 'Campaign is being processed.']);
