@@ -133,7 +133,7 @@ const campaignPerformanceOption = computed(() => ({
 
 const quickActions = [
   { label: 'Add Contact', icon: UserPlus, href: route('contacts.create'), color: 'bg-indigo-50 text-indigo-600' },
-  { label: 'Import Contacts', icon: Upload, href: route('imports.upload'), color: 'bg-emerald-50 text-emerald-600' },
+  { label: 'Import Contacts', icon: Upload, href: route('imports.create'), color: 'bg-emerald-50 text-emerald-600' },
   { label: 'Create Campaign', icon: Megaphone, href: route('campaigns.builder'), color: 'bg-amber-50 text-amber-600' },
   { label: 'Create Template', icon: FileText, href: route('templates.create'), color: 'bg-sky-50 text-sky-600' },
 ];
@@ -323,8 +323,16 @@ const quickActions = [
 
     <!-- Activity Log -->
     <Card>
-      <CardHeader>
-        <CardTitle>Recent Activity</CardTitle>
+      <CardHeader class="flex flex-row items-center justify-between">
+        <div>
+          <CardTitle>Recent Activity</CardTitle>
+          <p v-if="activity_log_total > activity_log.length" class="mt-1 text-xs text-muted">
+            Latest {{ activity_log.length }} of {{ formatNumber(activity_log_total) }}
+          </p>
+        </div>
+        <Link :href="route('activity-logs.index')" class="text-xs text-primary hover:text-primary-hover">
+          View all →
+        </Link>
       </CardHeader>
       <CardContent>
         <div v-if="activity_log.length === 0" class="py-8 text-center text-sm text-muted">
@@ -341,9 +349,16 @@ const quickActions = [
             </div>
             <div class="min-w-0 flex-1">
               <p class="text-sm text-foreground">{{ log.description }}</p>
-              <div class="flex items-center gap-2 mt-0.5">
+              <div class="flex flex-wrap items-center gap-2 mt-0.5">
                 <span v-if="log.causer_name" class="text-xs text-muted">{{ log.causer_name }}</span>
                 <span class="text-xs text-muted-foreground">{{ formatRelativeTime(log.created_at) }}</span>
+                <Link
+                  v-if="log.subject_url"
+                  :href="log.subject_url"
+                  class="text-xs font-medium text-primary hover:text-primary-hover"
+                >
+                  {{ log.subject_action_label ?? 'Open' }}
+                </Link>
               </div>
             </div>
           </div>

@@ -85,8 +85,7 @@ class SendSingleSms implements ShouldQueue
             ]);
             $smsMessage->refresh();
 
-            $this->campaign->increment('failed_count');
-            $this->campaign->decrement('pending_count');
+            $this->refreshCampaignCounts();
             $activityLogger->logCampaignRecipientFailed($this->campaign, $this->recipient, $smsMessage, $errorMessage);
 
             Log::warning('SMS send blocked due to unresolved placeholders', [
@@ -120,8 +119,7 @@ class SendSingleSms implements ShouldQueue
             $smsMessage->refresh();
 
             // Update campaign counts
-            $this->campaign->increment('sent_count');
-            $this->campaign->decrement('pending_count');
+            $this->refreshCampaignCounts();
             $activityLogger->logCampaignRecipientSent($this->campaign, $this->recipient, $smsMessage);
         } else {
             // Update recipient
@@ -142,8 +140,7 @@ class SendSingleSms implements ShouldQueue
             $smsMessage->refresh();
 
             // Update campaign counts
-            $this->campaign->increment('failed_count');
-            $this->campaign->decrement('pending_count');
+            $this->refreshCampaignCounts();
             $activityLogger->logCampaignRecipientFailed(
                 $this->campaign,
                 $this->recipient,
@@ -151,5 +148,21 @@ class SendSingleSms implements ShouldQueue
                 $result->errorMessage ?? 'SMS provider rejected the message.'
             );
         }
+    }
+
+    private function refreshCampaignCounts(): void
+    {
+        $counts = CampaignRecipient::where('campaign_id', $this->campaign->id)
+            ->selectRaw('status, COUNT(*) as count')
+            ->groupBy('status')
+            ->pluck('count', 'status');
+
+        $this->campaign->forceFill([
+            'pending_count' => (int) ($counts['pending'] ?? 0) + (int) ($counts['queued'] ?? 0),
+            'queued_count' => (int) ($counts['queued'] ?? 0),
+            'sent_count' => (int) ($counts['sent'] ?? 0),
+            'failed_count' => (int) ($counts['failed'] ?? 0),
+            'skipped_count' => (int) ($counts['skipped'] ?? 0),
+        ])->save();
     }
 }

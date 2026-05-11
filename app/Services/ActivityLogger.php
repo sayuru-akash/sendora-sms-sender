@@ -35,6 +35,8 @@ class ActivityLogger
      */
     public function logContactCreated(Contact $contact): Activity
     {
+        $contact->loadMissing(['lists:id,name', 'tags:id,name']);
+
         return activity()
             ->performedOn($contact)
             ->causedBy(auth()->user())
@@ -42,6 +44,10 @@ class ActivityLogger
             ->withProperties([
                 'phone' => $contact->phone_normalised,
                 'name' => $contact->full_name,
+                'list_ids' => $contact->lists->pluck('id')->values()->all(),
+                'list_names' => $contact->lists->pluck('name')->values()->all(),
+                'tag_ids' => $contact->tags->pluck('id')->values()->all(),
+                'tag_names' => $contact->tags->pluck('name')->values()->all(),
             ])
             ->log('Contact created');
     }
@@ -51,6 +57,8 @@ class ActivityLogger
      */
     public function logContactUpdated(Contact $contact): Activity
     {
+        $contact->loadMissing(['lists:id,name', 'tags:id,name']);
+
         return activity()
             ->performedOn($contact)
             ->causedBy(auth()->user())
@@ -58,6 +66,10 @@ class ActivityLogger
             ->withProperties([
                 'phone' => $contact->phone_normalised,
                 'name' => $contact->full_name,
+                'list_ids' => $contact->lists->pluck('id')->values()->all(),
+                'list_names' => $contact->lists->pluck('name')->values()->all(),
+                'tag_ids' => $contact->tags->pluck('id')->values()->all(),
+                'tag_names' => $contact->tags->pluck('name')->values()->all(),
             ])
             ->log('Contact updated');
     }
@@ -79,10 +91,35 @@ class ActivityLogger
     }
 
     /**
+     * Log a bulk import upload.
+     */
+    public function logBulkImportUploaded(Import $import): Activity
+    {
+        $options = $import->options ?? [];
+
+        return activity()
+            ->performedOn($import)
+            ->causedBy($import->creator)
+            ->event('import_uploaded')
+            ->withProperties([
+                'filename' => $import->original_filename,
+                'total_rows' => $import->total_rows,
+                'duplicate_handling' => $options['duplicate_handling'] ?? 'skip',
+                'list_ids' => $options['list_ids'] ?? ($import->list_id ? [$import->list_id] : []),
+                'tag_ids' => $options['tag_ids'] ?? [],
+                'uploaded_at' => now()->toIso8601String(),
+                'timezone' => config('app.timezone'),
+            ])
+            ->log('Bulk import uploaded');
+    }
+
+    /**
      * Log a bulk import started.
      */
     public function logBulkImportStarted(Import $import): Activity
     {
+        $options = $import->options ?? [];
+
         return activity()
             ->performedOn($import)
             ->causedBy($import->creator)
@@ -90,6 +127,11 @@ class ActivityLogger
             ->withProperties([
                 'filename' => $import->original_filename,
                 'total_rows' => $import->total_rows,
+                'duplicate_handling' => $options['duplicate_handling'] ?? 'skip',
+                'list_ids' => $options['list_ids'] ?? ($import->list_id ? [$import->list_id] : []),
+                'tag_ids' => $options['tag_ids'] ?? [],
+                'started_at' => now()->toIso8601String(),
+                'timezone' => config('app.timezone'),
             ])
             ->log('Bulk import started');
     }
@@ -99,6 +141,8 @@ class ActivityLogger
      */
     public function logBulkImportCompleted(Import $import): Activity
     {
+        $options = $import->options ?? [];
+
         return activity()
             ->performedOn($import)
             ->causedBy($import->creator)
@@ -109,8 +153,38 @@ class ActivityLogger
                 'successful_rows' => $import->successful_rows,
                 'failed_rows' => $import->failed_rows,
                 'duplicate_rows' => $import->duplicate_rows,
+                'invalid_rows' => $import->invalid_rows,
+                'list_ids' => $options['list_ids'] ?? ($import->list_id ? [$import->list_id] : []),
+                'tag_ids' => $options['tag_ids'] ?? [],
+                'completed_at' => now()->toIso8601String(),
+                'timezone' => config('app.timezone'),
             ])
             ->log('Bulk import completed');
+    }
+
+    public function logBulkImportFailed(Import $import, string $errorMessage): Activity
+    {
+        $options = $import->options ?? [];
+
+        return activity()
+            ->performedOn($import)
+            ->causedBy($import->creator)
+            ->event('import_failed')
+            ->withProperties([
+                'filename' => $import->original_filename,
+                'total_rows' => $import->total_rows,
+                'processed_rows' => $import->processed_rows,
+                'successful_rows' => $import->successful_rows,
+                'failed_rows' => $import->failed_rows,
+                'duplicate_rows' => $import->duplicate_rows,
+                'invalid_rows' => $import->invalid_rows,
+                'list_ids' => $options['list_ids'] ?? ($import->list_id ? [$import->list_id] : []),
+                'tag_ids' => $options['tag_ids'] ?? [],
+                'error_message' => Str::limit($errorMessage, 500),
+                'failed_at' => now()->toIso8601String(),
+                'timezone' => config('app.timezone'),
+            ])
+            ->log('Bulk import failed');
     }
 
     /**

@@ -1,9 +1,11 @@
+import type { ListModel, Tag } from '@/types';
+
 export interface Import {
   id: number;
   filename: string;
   original_filename: string;
   file_type: 'csv' | 'xlsx';
-  status: 'uploading' | 'mapping' | 'processing' | 'completed' | 'failed' | 'cancelled';
+  status: 'uploaded' | 'pending' | 'uploading' | 'mapping' | 'processing' | 'completed' | 'failed' | 'cancelled';
   total_rows: number;
   processed_rows: number;
   successful_rows: number;
@@ -12,9 +14,11 @@ export interface Import {
   invalid_rows: number;
   progress: number;
   column_mapping: Record<string, string> | null;
-  duplicate_handling: 'skip' | 'update' | 'add';
+  duplicate_handling: 'skip' | 'update' | 'add' | 'add_to_list';
   list_ids: number[] | null;
   tag_ids: number[] | null;
+  lists?: ListModel[];
+  tags?: Tag[];
   phone_column: string | null;
   error_message: string | null;
   failed_rows_data: ImportFailedRow[] | null;
@@ -41,7 +45,7 @@ export interface ImportColumnMapping {
 
 export interface ImportUploadData {
   file: File;
-  duplicate_handling: 'skip' | 'update' | 'add';
+  duplicate_handling: 'skip' | 'update' | 'add' | 'add_to_list';
   list_ids: number[];
   tag_ids: number[];
 }
@@ -49,7 +53,7 @@ export interface ImportUploadData {
 export interface ImportMappingData {
   mapping: Record<string, string>;
   phone_column: string;
-  duplicate_handling: 'skip' | 'update' | 'add';
+  duplicate_handling: 'skip' | 'update' | 'add' | 'add_to_list';
   list_ids: number[];
   tag_ids: number[];
 }

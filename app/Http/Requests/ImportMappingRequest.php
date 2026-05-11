@@ -34,6 +34,10 @@ class ImportMappingRequest extends FormRequest
             'options.default_status' => ['nullable', 'in:active,inactive'],
             'options.default_source' => ['nullable', 'string', 'max:255'],
             'list_id' => ['nullable', 'integer', 'exists:lists,id'],
+            'list_ids' => ['nullable', 'array'],
+            'list_ids.*' => ['integer', 'exists:lists,id'],
+            'tag_ids' => ['nullable', 'array'],
+            'tag_ids.*' => ['integer', 'exists:tags,id'],
         ];
     }
 }

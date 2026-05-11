@@ -8,6 +8,7 @@ import Button from '@/Components/ui/Button.vue';
 import Label from '@/Components/ui/Label.vue';
 import Select from '@/Components/ui/Select.vue';
 import Alert from '@/Components/ui/Alert.vue';
+import MultiSelectCombobox from '@/Components/common/MultiSelectCombobox.vue';
 import { Head, useForm } from '@inertiajs/vue3';
 import { Upload, FileSpreadsheet, X, Check } from 'lucide-vue-next';
 import type { ListModel, Tag } from '@/types';
@@ -33,7 +34,7 @@ const fileError = ref('');
 const duplicateOptions = [
   { label: 'Skip duplicates', value: 'skip' },
   { label: 'Update existing', value: 'update' },
-  { label: 'Add anyway', value: 'add' },
+  { label: 'Add to selected lists only', value: 'add_to_list' },
 ];
 
 function handleDragOver(e: DragEvent) {
@@ -173,42 +174,26 @@ function submit() {
 
           <div class="space-y-1.5">
             <Label>Assign to Lists</Label>
-            <div class="flex flex-wrap gap-2 p-3 rounded-lg border border-border bg-white min-h-[44px]">
-              <label
-                v-for="list in lists"
-                :key="list.id"
-                class="inline-flex items-center gap-1.5 cursor-pointer"
-              >
-                <input
-                  type="checkbox"
-                  :value="list.id"
-                  v-model="form.list_ids"
-                  class="h-3.5 w-3.5 rounded border-border text-primary"
-                />
-                <span class="text-sm text-foreground">{{ list.name }}</span>
-              </label>
-              <span v-if="!lists.length" class="text-sm text-muted">No lists available</span>
-            </div>
+            <MultiSelectCombobox
+              v-model="form.list_ids"
+              :options="lists"
+              placeholder="Choose lists for imported contacts"
+              search-placeholder="Search lists..."
+              empty-text="No matching lists"
+            />
+            <p v-if="form.errors.list_ids" class="text-xs text-danger">{{ form.errors.list_ids }}</p>
           </div>
 
           <div class="space-y-1.5">
             <Label>Assign Tags</Label>
-            <div class="flex flex-wrap gap-2 p-3 rounded-lg border border-border bg-white min-h-[44px]">
-              <label
-                v-for="tag in tags"
-                :key="tag.id"
-                class="inline-flex items-center gap-1.5 cursor-pointer"
-              >
-                <input
-                  type="checkbox"
-                  :value="tag.id"
-                  v-model="form.tag_ids"
-                  class="h-3.5 w-3.5 rounded border-border text-primary"
-                />
-                <span class="text-sm text-foreground">{{ tag.name }}</span>
-              </label>
-              <span v-if="!tags.length" class="text-sm text-muted">No tags available</span>
-            </div>
+            <MultiSelectCombobox
+              v-model="form.tag_ids"
+              :options="tags"
+              placeholder="Choose tags for imported contacts"
+              search-placeholder="Search tags..."
+              empty-text="No matching tags"
+            />
+            <p v-if="form.errors.tag_ids" class="text-xs text-danger">{{ form.errors.tag_ids }}</p>
           </div>
         </CardContent>
       </Card>

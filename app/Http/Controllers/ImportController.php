@@ -27,18 +27,29 @@ class ImportController extends Controller
 
     public function index(Request $request): Response
     {
+        $search = $request->string('search')->trim()->toString();
+
         $imports = $this->paginate(
             Import::with('creator')
-                ->when($request->search, fn ($q, $search) => $q->where('original_filename', 'ilike', "%{$search}%"))
+                ->when($search !== '', fn ($q) => $q->whereRaw('LOWER(original_filename) LIKE ?', ['%'.mb_strtolower($search).'%']))
                 ->when($request->status, fn ($q, $status) => $q->where('status', $status))
                 ->latest(),
             $request,
             25
         );
+        $imports['data'] = collect($imports['data'])
+            ->map(fn (Import $import): array => $this->formatImportSummary($import))
+            ->all();
 
         return Inertia::render('Imports/Index', [
             'imports' => $imports,
             'filters' => $request->only(['search', 'status', 'per_page']),
+            'summary' => [
+                'total' => Import::count(),
+                'processing' => Import::whereIn('status', ['pending', 'processing'])->count(),
+                'completed' => Import::where('status', 'completed')->count(),
+                'failed' => Import::where('status', 'failed')->count(),
+            ],
         ]);
     }
 
@@ -71,8 +82,9 @@ class ImportController extends Controller
         $totalRows = $this->countRows($path, $type);
 
         $options = [
-            'duplicate_handling' => $request->input('duplicate_handling', 'skip'),
-            'tag_ids' => $request->input('tag_ids', []),
+            'duplicate_handling' => $this->normaliseDuplicateHandling($request->input('duplicate_handling', 'skip')),
+            'list_ids' => $this->normaliseIds($request->input('list_ids', [])),
+            'tag_ids' => $this->normaliseIds($request->input('tag_ids', [])),
         ];
 
         $import = Import::create([
@@ -83,9 +95,11 @@ class ImportController extends Controller
             'status' => 'uploaded',
             'total_rows' => $totalRows,
             'options' => $options,
-            'list_id' => $request->input('list_id') ?? collect($request->input('list_ids', []))->first(),
+            'list_id' => $request->input('list_id') ?? collect($options['list_ids'])->first(),
             'created_by' => $request->user()->id,
         ]);
+
+        $this->activityLogger->logBulkImportUploaded($import);
 
         if ($request->expectsJson()) {
             return response()->json(['import' => $import], 201);
@@ -102,6 +116,9 @@ class ImportController extends Controller
         $headers = $this->getHeaders($import->file_path, $import->type);
         $sampleRows = $this->getSampleRows($import->file_path, $import->type, 5);
         $suggestedMapping = $this->suggestMapping($headers);
+        $options = $import->options ?? [];
+        $lists = ListModel::active()->orderBy('name')->get(['id', 'name', 'colour']);
+        $tags = Tag::orderBy('name')->get(['id', 'name', 'colour']);
 
         $contactFields = [
             'first_name', 'last_name', 'full_name', 'phone', 'email',
@@ -115,6 +132,13 @@ class ImportController extends Controller
                 'contact_fields' => $contactFields,
                 'mapping' => $suggestedMapping,
                 'preview_data' => $sampleRows,
+            ],
+            'lists' => $lists,
+            'tags' => $tags,
+            'options' => [
+                'duplicate_handling' => $options['duplicate_handling'] ?? 'skip',
+                'list_ids' => $this->normaliseIds($options['list_ids'] ?? ($import->list_id ? [$import->list_id] : [])),
+                'tag_ids' => $this->normaliseIds($options['tag_ids'] ?? []),
             ],
         ]);
     }
@@ -149,10 +173,20 @@ class ImportController extends Controller
      */
     public function confirm(ImportMappingRequest $request, Import $import)
     {
+        $existingOptions = $import->options ?? [];
+        $requestOptions = $request->input('options', []);
+        $listIds = $this->normaliseIds($request->input('list_ids', $existingOptions['list_ids'] ?? ($import->list_id ? [$import->list_id] : [])));
+        $tagIds = $this->normaliseIds($request->input('tag_ids', $existingOptions['tag_ids'] ?? []));
+        $options = array_merge($existingOptions, $requestOptions, [
+            'duplicate_handling' => $this->normaliseDuplicateHandling($requestOptions['duplicate_handling'] ?? $existingOptions['duplicate_handling'] ?? 'skip'),
+            'list_ids' => $listIds,
+            'tag_ids' => $tagIds,
+        ]);
+
         $import->update([
             'column_mapping' => $request->input('column_mapping'),
-            'options' => $request->input('options', []),
-            'list_id' => $request->input('list_id', $import->list_id),
+            'options' => $options,
+            'list_id' => $request->input('list_id') ?? collect($listIds)->first(),
             'status' => 'pending',
         ]);
 
@@ -178,6 +212,15 @@ class ImportController extends Controller
     public function show(Import $import, Request $request): Response|JsonResponse
     {
         $import->load('creator');
+        $options = $import->options ?? [];
+        $listIds = $this->normaliseIds($options['list_ids'] ?? ($import->list_id ? [$import->list_id] : []));
+        $tagIds = $this->normaliseIds($options['tag_ids'] ?? []);
+        $selectedLists = $listIds === []
+            ? collect()
+            : ListModel::whereIn('id', $listIds)->orderBy('name')->get(['id', 'name', 'colour']);
+        $selectedTags = $tagIds === []
+            ? collect()
+            : Tag::whereIn('id', $tagIds)->orderBy('name')->get(['id', 'name', 'colour']);
 
         if ($request->expectsJson()) {
             return response()->json(['import' => $import]);
@@ -205,9 +248,11 @@ class ImportController extends Controller
             'invalid_rows' => $import->invalid_rows ?? 0,
             'progress' => $import->progress_percent,
             'column_mapping' => $import->column_mapping,
-            'duplicate_handling' => $import->options['duplicate_handling'] ?? 'skip',
-            'list_ids' => $import->list_id ? [$import->list_id] : [],
-            'tag_ids' => [],
+            'duplicate_handling' => $options['duplicate_handling'] ?? 'skip',
+            'list_ids' => $listIds,
+            'tag_ids' => $tagIds,
+            'lists' => $selectedLists,
+            'tags' => $selectedTags,
             'phone_column' => $import->column_mapping ? collect($import->column_mapping)->flip()->get('phone') : null,
             'error_message' => null,
             'failed_rows_data' => $failedRowsData,
@@ -416,7 +461,7 @@ class ImportController extends Controller
                 $batch[] = [
                     'import_id' => $import->id,
                     'row_number' => $rowNumber,
-                    'raw_data' => $record,
+                    'raw_data' => json_encode($record),
                     'status' => 'pending',
                     'created_at' => now(),
                     'updated_at' => now(),
@@ -448,7 +493,7 @@ class ImportController extends Controller
                     $batch[] = [
                         'import_id' => $import->id,
                         'row_number' => $rowNumber,
-                        'raw_data' => $rowData,
+                        'raw_data' => json_encode($rowData),
                         'status' => 'pending',
                         'created_at' => now(),
                         'updated_at' => now(),
@@ -503,5 +548,60 @@ class ImportController extends Controller
         }
 
         return $mapping;
+    }
+
+    /**
+     * @return array<int, int>
+     */
+    private function normaliseIds(mixed $ids): array
+    {
+        return collect($ids ?? [])
+            ->filter(fn ($id) => is_numeric($id))
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn (int $id) => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    private function normaliseDuplicateHandling(?string $duplicateHandling): string
+    {
+        return $duplicateHandling === 'add' ? 'add_to_list' : ($duplicateHandling ?: 'skip');
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function formatImportSummary(Import $import): array
+    {
+        $options = $import->options ?? [];
+        $listIds = $this->normaliseIds($options['list_ids'] ?? ($import->list_id ? [$import->list_id] : []));
+        $tagIds = $this->normaliseIds($options['tag_ids'] ?? []);
+
+        return [
+            'id' => $import->id,
+            'filename' => $import->filename,
+            'original_filename' => $import->original_filename,
+            'file_type' => $import->type,
+            'status' => $import->status,
+            'total_rows' => $import->total_rows,
+            'processed_rows' => $import->processed_rows ?? 0,
+            'successful_rows' => $import->successful_rows ?? 0,
+            'failed_rows' => $import->failed_rows ?? 0,
+            'duplicate_rows' => $import->duplicate_rows ?? 0,
+            'invalid_rows' => $import->invalid_rows ?? 0,
+            'progress' => $import->progress_percent,
+            'duplicate_handling' => $options['duplicate_handling'] ?? 'skip',
+            'list_ids' => $listIds,
+            'tag_ids' => $tagIds,
+            'lists' => $listIds === [] ? [] : ListModel::whereIn('id', $listIds)->orderBy('name')->get(['id', 'name', 'colour']),
+            'tags' => $tagIds === [] ? [] : Tag::whereIn('id', $tagIds)->orderBy('name')->get(['id', 'name', 'colour']),
+            'created_by' => $import->created_by,
+            'created_by_name' => $import->creator?->name,
+            'started_at' => $import->started_at?->toISOString(),
+            'completed_at' => $import->completed_at?->toISOString(),
+            'created_at' => $import->created_at?->toISOString(),
+            'updated_at' => $import->updated_at?->toISOString(),
+        ];
     }
 }

@@ -8,6 +8,7 @@ import Input from '@/Components/ui/Input.vue';
 import Label from '@/Components/ui/Label.vue';
 import Select from '@/Components/ui/Select.vue';
 import Textarea from '@/Components/ui/Textarea.vue';
+import MultiSelectCombobox from '@/Components/common/MultiSelectCombobox.vue';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import { Save } from 'lucide-vue-next';
 import type { Tag, ListModel } from '@/types';
@@ -174,46 +175,28 @@ function submit() {
             </div>
           </div>
 
-          <!-- Tags Multi-Select -->
           <div class="space-y-1.5">
             <Label>Tags</Label>
-            <div class="flex flex-wrap gap-2 p-3 rounded-lg border border-border bg-white min-h-[44px]">
-              <label
-                v-for="tag in tags"
-                :key="tag.id"
-                class="inline-flex items-center gap-1.5 cursor-pointer"
-              >
-                <input
-                  type="checkbox"
-                  :value="tag.id"
-                  v-model="form.tags"
-                  class="h-3.5 w-3.5 rounded border-border text-primary"
-                />
-                <span class="text-sm text-foreground">{{ tag.name }}</span>
-              </label>
-              <span v-if="!tags.length" class="text-sm text-muted">No tags available</span>
-            </div>
+            <MultiSelectCombobox
+              v-model="form.tags"
+              :options="tags"
+              placeholder="Choose tags"
+              search-placeholder="Search tags..."
+              empty-text="No matching tags"
+            />
+            <p v-if="form.errors.tags" class="text-xs text-danger">{{ form.errors.tags }}</p>
           </div>
 
-          <!-- Lists Multi-Select -->
           <div class="space-y-1.5">
             <Label>Lists</Label>
-            <div class="flex flex-wrap gap-2 p-3 rounded-lg border border-border bg-white min-h-[44px]">
-              <label
-                v-for="list in lists"
-                :key="list.id"
-                class="inline-flex items-center gap-1.5 cursor-pointer"
-              >
-                <input
-                  type="checkbox"
-                  :value="list.id"
-                  v-model="form.lists"
-                  class="h-3.5 w-3.5 rounded border-border text-primary"
-                />
-                <span class="text-sm text-foreground">{{ list.name }}</span>
-              </label>
-              <span v-if="!lists.length" class="text-sm text-muted">No lists available</span>
-            </div>
+            <MultiSelectCombobox
+              v-model="form.lists"
+              :options="lists"
+              placeholder="Choose lists"
+              search-placeholder="Search lists..."
+              empty-text="No matching lists"
+            />
+            <p v-if="form.errors.lists" class="text-xs text-danger">{{ form.errors.lists }}</p>
           </div>
         </CardContent>
       </Card>

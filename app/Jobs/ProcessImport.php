@@ -5,7 +5,6 @@ namespace App\Jobs;
 use App\Models\Contact;
 use App\Models\Import;
 use App\Models\ImportRow;
-use App\Models\ListModel;
 use App\Services\ActivityLogger;
 use App\Services\PhoneNormalizer;
 use Illuminate\Bus\Queueable;
@@ -14,6 +13,7 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class ProcessImport implements ShouldQueue
@@ -21,6 +21,7 @@ class ProcessImport implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $tries = 3;
+
     public int $timeout = 3600; // 1 hour
 
     public function __construct(
@@ -36,9 +37,13 @@ class ProcessImport implements ShouldQueue
 
         $mapping = $this->import->column_mapping ?? [];
         $options = $this->import->options ?? [];
-        $duplicateHandling = $options['duplicate_handling'] ?? 'skip';
+        $duplicateHandling = ($options['duplicate_handling'] ?? 'skip') === 'add'
+            ? 'add_to_list'
+            : ($options['duplicate_handling'] ?? 'skip');
         $defaultStatus = $options['default_status'] ?? 'active';
         $defaultSource = $options['default_source'] ?? 'import';
+        $listIds = $this->normaliseIds($options['list_ids'] ?? ($this->import->list_id ? [$this->import->list_id] : []));
+        $tagIds = $this->normaliseIds($options['tag_ids'] ?? []);
 
         $successful = 0;
         $failed = 0;
@@ -72,18 +77,20 @@ class ProcessImport implements ShouldQueue
                         $row->update(['status' => 'failed', 'error_message' => 'Phone number is empty.']);
                         $invalid++;
                         $this->updateImportCounters($processed, $successful, $failed, $duplicates, $invalid);
+
                         continue;
                     }
 
                     $normalised = $phoneNormalizer->normalize($phone);
 
-                    if (!$phoneNormalizer->validate($normalised)) {
+                    if (! $phoneNormalizer->validate($normalised)) {
                         $row->update([
                             'status' => 'failed',
                             'error_message' => $phoneNormalizer->getValidationError($phone) ?? 'Invalid phone number.',
                         ]);
                         $invalid++;
                         $this->updateImportCounters($processed, $successful, $failed, $duplicates, $invalid);
+
                         continue;
                     }
 
@@ -95,9 +102,10 @@ class ProcessImport implements ShouldQueue
                             $row->update(['status' => 'skipped', 'error_message' => 'Duplicate phone number.']);
                             $duplicates++;
                             $this->updateImportCounters($processed, $successful, $failed, $duplicates, $invalid);
+
                             continue;
                         } elseif ($duplicateHandling === 'update') {
-                            DB::transaction(function () use ($existingContact, $contactData, $defaultStatus, $defaultSource, $normalised) {
+                            DB::transaction(function () use ($existingContact, $contactData, $listIds, $tagIds) {
                                 $existingContact->update(array_filter([
                                     'first_name' => $contactData['first_name'] ?? $existingContact->first_name,
                                     'last_name' => $contactData['last_name'] ?? $existingContact->last_name,
@@ -112,9 +120,12 @@ class ProcessImport implements ShouldQueue
                                     'notes' => $contactData['notes'] ?? $existingContact->notes,
                                 ], fn ($v) => $v !== null && $v !== ''));
 
-                                // Add to list if configured
-                                if ($this->import->list_id) {
-                                    $existingContact->lists()->syncWithoutDetaching([$this->import->list_id]);
+                                if ($listIds !== []) {
+                                    $existingContact->lists()->syncWithoutDetaching($listIds);
+                                }
+
+                                if ($tagIds !== []) {
+                                    $existingContact->tags()->syncWithoutDetaching($tagIds);
                                 }
                             });
 
@@ -122,20 +133,26 @@ class ProcessImport implements ShouldQueue
                             $successful++;
                             $duplicates++; // counted as duplicate but still updated
                         } elseif ($duplicateHandling === 'add_to_list') {
-                            if ($this->import->list_id) {
-                                $existingContact->lists()->syncWithoutDetaching([$this->import->list_id]);
+                            if ($listIds !== []) {
+                                $existingContact->lists()->syncWithoutDetaching($listIds);
                             }
+
+                            if ($tagIds !== []) {
+                                $existingContact->tags()->syncWithoutDetaching($tagIds);
+                            }
+
                             $row->update(['status' => 'processed', 'contact_id' => $existingContact->id]);
+                            $successful++;
                             $duplicates++;
                         }
                     } else {
                         // Create new contact
-                        $contact = DB::transaction(function () use ($contactData, $normalised, $defaultStatus, $defaultSource) {
+                        $contact = DB::transaction(function () use ($contactData, $normalised, $defaultStatus, $defaultSource, $listIds, $tagIds) {
                             $contact = Contact::create([
                                 'uuid' => Str::uuid(),
                                 'first_name' => $contactData['first_name'] ?? null,
                                 'last_name' => $contactData['last_name'] ?? null,
-                                'full_name' => $contactData['full_name'] ?? trim(($contactData['first_name'] ?? '') . ' ' . ($contactData['last_name'] ?? '')),
+                                'full_name' => $contactData['full_name'] ?? trim(($contactData['first_name'] ?? '').' '.($contactData['last_name'] ?? '')),
                                 'phone' => $contactData['phone'],
                                 'phone_normalised' => $normalised,
                                 'email' => $contactData['email'] ?? null,
@@ -144,7 +161,7 @@ class ProcessImport implements ShouldQueue
                                 'district' => $contactData['district'] ?? null,
                                 'city' => $contactData['city'] ?? null,
                                 'gender' => $contactData['gender'] ?? null,
-                                'date_of_birth' => !empty($contactData['date_of_birth']) ? $contactData['date_of_birth'] : null,
+                                'date_of_birth' => ! empty($contactData['date_of_birth']) ? $contactData['date_of_birth'] : null,
                                 'source' => $contactData['source'] ?? $defaultSource,
                                 'status' => $defaultStatus,
                                 'notes' => $contactData['notes'] ?? null,
@@ -152,9 +169,12 @@ class ProcessImport implements ShouldQueue
                                 'updated_by' => $this->import->created_by,
                             ]);
 
-                            // Assign to import list
-                            if ($this->import->list_id) {
-                                $contact->lists()->syncWithoutDetaching([$this->import->list_id]);
+                            if ($listIds !== []) {
+                                $contact->lists()->syncWithoutDetaching($listIds);
+                            }
+
+                            if ($tagIds !== []) {
+                                $contact->tags()->syncWithoutDetaching($tagIds);
                             }
 
                             return $contact;
@@ -196,10 +216,12 @@ class ProcessImport implements ShouldQueue
                 'invalid_rows' => $invalid,
             ]);
 
-            \Illuminate\Support\Facades\Log::error('Import failed', [
+            Log::error('Import failed', [
                 'import_id' => $this->import->id,
                 'error' => $e->getMessage(),
             ]);
+
+            $activityLogger->logBulkImportFailed($this->import, $e->getMessage());
 
             throw $e;
         }
@@ -214,5 +236,19 @@ class ProcessImport implements ShouldQueue
             'duplicate_rows' => $duplicates,
             'invalid_rows' => $invalid,
         ]);
+    }
+
+    /**
+     * @return array<int, int>
+     */
+    private function normaliseIds(mixed $ids): array
+    {
+        return collect($ids ?? [])
+            ->filter(fn ($id) => is_numeric($id))
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn (int $id) => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
     }
 }

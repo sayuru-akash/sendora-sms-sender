@@ -43,46 +43,65 @@ class SendCampaignMessages implements ShouldQueue
         $batchSize = min(50, $rateLimit);
         $delayBetweenBatches = max(1, (60 / ($rateLimit / $batchSize)));
 
-        $pendingRecipients = CampaignRecipient::where('campaign_id', $this->campaign->id)
-            ->where('status', 'pending')
-            ->orderBy('id');
-
         $totalProcessed = 0;
 
-        $pendingRecipients->chunk($batchSize, function ($recipients) use ($delayBetweenBatches, &$totalProcessed) {
-            // Check if campaign is still active before each batch
-            $this->campaign->refresh();
+        CampaignRecipient::where('campaign_id', $this->campaign->id)
+            ->where('status', 'pending')
+            ->orderBy('id')
+            ->chunkById($batchSize, function ($recipients) use ($delayBetweenBatches, &$totalProcessed) {
+                // Check if campaign is still active before each batch
+                $this->campaign->refresh();
 
-            if ($this->campaign->isPaused()) {
-                Log::info('Campaign paused, stopping send', ['campaign_id' => $this->campaign->id]);
+                if ($this->campaign->isPaused()) {
+                    Log::info('Campaign paused, stopping send', ['campaign_id' => $this->campaign->id]);
 
-                return false; // Stop chunking
-            }
+                    return false; // Stop chunking
+                }
 
-            if ($this->campaign->isCancelled()) {
-                Log::info('Campaign cancelled, stopping send', ['campaign_id' => $this->campaign->id]);
+                if ($this->campaign->isCancelled()) {
+                    Log::info('Campaign cancelled, stopping send', ['campaign_id' => $this->campaign->id]);
 
-                return false; // Stop chunking
-            }
+                    return false; // Stop chunking
+                }
 
-            foreach ($recipients as $recipient) {
-                SendSingleSms::dispatch($this->campaign, $recipient);
-                $totalProcessed++;
+                foreach ($recipients as $recipient) {
+                    $recipient->update([
+                        'status' => 'queued',
+                        'queued_at' => now(),
+                    ]);
 
-                // Update queued count
-                $recipient->update([
-                    'status' => 'queued',
-                    'queued_at' => now(),
-                ]);
-            }
+                    SendSingleSms::dispatch($this->campaign, $recipient->fresh());
+                    $totalProcessed++;
+                }
 
-            // Update campaign queued count
-            $this->campaign->update(['queued_count' => $totalProcessed]);
+                $this->refreshCampaignCounts();
 
-            // Rate limit delay
-            if ($delayBetweenBatches > 0) {
-                sleep((int) $delayBetweenBatches);
-            }
-        });
+                // Rate limit delay
+                if ($delayBetweenBatches > 0 && ! app()->runningUnitTests()) {
+                    sleep((int) $delayBetweenBatches);
+                }
+            });
+
+        $this->refreshCampaignCounts();
+        Log::info('Campaign send dispatch completed', [
+            'campaign_id' => $this->campaign->id,
+            'queued_recipients' => $totalProcessed,
+        ]);
+    }
+
+    private function refreshCampaignCounts(): void
+    {
+        $counts = CampaignRecipient::where('campaign_id', $this->campaign->id)
+            ->selectRaw('status, COUNT(*) as count')
+            ->groupBy('status')
+            ->pluck('count', 'status');
+
+        $this->campaign->forceFill([
+            'pending_count' => (int) ($counts['pending'] ?? 0) + (int) ($counts['queued'] ?? 0),
+            'queued_count' => (int) ($counts['queued'] ?? 0),
+            'sent_count' => (int) ($counts['sent'] ?? 0),
+            'failed_count' => (int) ($counts['failed'] ?? 0),
+            'skipped_count' => (int) ($counts['skipped'] ?? 0),
+        ])->save();
     }
 }

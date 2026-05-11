@@ -184,4 +184,6 @@ export interface DashboardProps {
     }>;
     top_lists: ListModel[];
     activity_log: ActivityLog[];
+    activity_log_limit: number;
+    activity_log_total: number;
 }

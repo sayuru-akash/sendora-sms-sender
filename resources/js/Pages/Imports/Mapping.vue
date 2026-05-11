@@ -10,13 +10,22 @@ import Button from '@/Components/ui/Button.vue';
 import Label from '@/Components/ui/Label.vue';
 import Select from '@/Components/ui/Select.vue';
 import Alert from '@/Components/ui/Alert.vue';
+import MultiSelectCombobox from '@/Components/common/MultiSelectCombobox.vue';
 import { Head, useForm } from '@inertiajs/vue3';
-import { ArrowRight, CheckCircle } from 'lucide-vue-next';
+import { ArrowRight, CheckCircle, Tags } from 'lucide-vue-next';
 import type { ImportColumnMapping } from '@/types/import';
+import type { ListModel, Tag } from '@/types';
 
 const props = defineProps<{
   import_id: number;
   columns: ImportColumnMapping;
+  lists: ListModel[];
+  tags: Tag[];
+  options: {
+    duplicate_handling: string;
+    list_ids: number[];
+    tag_ids: number[];
+  };
 }>();
 
 const contactFields = [
@@ -34,11 +43,17 @@ const contactFields = [
   { label: 'Notes', value: 'notes' },
 ];
 
+function mappedFieldForColumn(column: string): string {
+  const entry = Object.entries(props.columns.mapping).find(([, mappedColumn]) => mappedColumn === column);
+
+  return entry?.[0] ?? '';
+}
+
 const mapping = ref<Record<string, string>>(
-  Object.fromEntries(props.columns.file_columns.map((col: string) => [col, props.columns.mapping[col] ?? '']))
+  Object.fromEntries(props.columns.file_columns.map((col: string) => [col, mappedFieldForColumn(col)]))
 );
 
-const phoneColumn = ref('');
+const phoneColumn = ref(props.columns.mapping.phone ?? '');
 
 const phoneOptions = computed(() => [
   { label: '-- Select phone column --', value: '' },
@@ -48,7 +63,17 @@ const phoneOptions = computed(() => [
 const form = useForm({
   mapping: mapping.value,
   phone_column: '',
+  duplicate_handling: props.options.duplicate_handling,
+  list_ids: [...props.options.list_ids],
+  tag_ids: [...props.options.tag_ids],
 });
+const formErrors = computed(() => form.errors as Record<string, string | undefined>);
+
+const duplicateOptions = [
+  { label: 'Skip duplicates', value: 'skip' },
+  { label: 'Update existing', value: 'update' },
+  { label: 'Add to selected lists only', value: 'add_to_list' },
+];
 
 function submit() {
   // Transform mapping from file_column->contact_field to contact_field->file_column
@@ -59,14 +84,23 @@ function submit() {
     }
   }
 
+  if (phoneColumn.value) {
+    columnMapping.phone = phoneColumn.value;
+  }
+
   form.transform((data) => ({
     column_mapping: columnMapping,
     phone_column: phoneColumn.value,
+    options: {
+      duplicate_handling: data.duplicate_handling,
+    },
+    list_ids: data.list_ids,
+    tag_ids: data.tag_ids,
   })).post(route('imports.confirm', props.import_id));
 }
 
 const isValid = computed(() => {
-  return phoneColumn.value && Object.values(mapping.value).includes('phone');
+  return Boolean(phoneColumn.value);
 });
 </script>
 
@@ -90,6 +124,50 @@ const isValid = computed(() => {
           <div class="space-y-1.5">
             <Label required>Phone Number Column</Label>
             <Select v-model="phoneColumn" :options="phoneOptions" />
+            <p v-if="formErrors['column_mapping.phone']" class="text-xs text-danger">
+              {{ formErrors['column_mapping.phone'] }}
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle class="flex items-center gap-2">
+            <Tags class="h-4 w-4 text-primary" />
+            Lists and Tags
+          </CardTitle>
+        </CardHeader>
+        <CardContent class="space-y-4">
+          <div class="space-y-1.5">
+            <Label>Duplicate Handling</Label>
+            <Select v-model="form.duplicate_handling" :options="duplicateOptions" />
+          </div>
+
+          <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div class="space-y-1.5">
+              <Label>Assign to Lists</Label>
+              <MultiSelectCombobox
+                v-model="form.list_ids"
+                :options="lists"
+                placeholder="Choose lists"
+                search-placeholder="Search lists..."
+                empty-text="No matching lists"
+              />
+              <p v-if="form.errors.list_ids" class="text-xs text-danger">{{ form.errors.list_ids }}</p>
+            </div>
+
+            <div class="space-y-1.5">
+              <Label>Assign Tags</Label>
+              <MultiSelectCombobox
+                v-model="form.tag_ids"
+                :options="tags"
+                placeholder="Choose tags"
+                search-placeholder="Search tags..."
+                empty-text="No matching tags"
+              />
+              <p v-if="form.errors.tag_ids" class="text-xs text-danger">{{ form.errors.tag_ids }}</p>
+            </div>
           </div>
         </CardContent>
       </Card>

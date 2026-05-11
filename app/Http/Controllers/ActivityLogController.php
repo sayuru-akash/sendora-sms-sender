@@ -66,7 +66,7 @@ class ActivityLogController extends Controller
             'causer_id' => $activity->causer_id,
             'causer_name' => $activity->causer?->name,
             'properties' => $activity->properties?->toArray() ?? [],
-            'created_at' => $activity->created_at,
+            'created_at' => $activity->created_at?->toISOString(),
         ];
     }
 

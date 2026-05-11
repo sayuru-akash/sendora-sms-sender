@@ -10,6 +10,7 @@ import StatusBadge from '@/Components/common/StatusBadge.vue';
 import Progress from '@/Components/ui/Progress.vue';
 import StatCard from '@/Components/common/StatCard.vue';
 import CampaignProgress from '@/Components/common/CampaignProgress.vue';
+import BadgeOverflowPopover from '@/Components/common/BadgeOverflowPopover.vue';
 import { Head } from '@inertiajs/vue3';
 import { Download, FileUp, CheckCircle, XCircle, Copy, AlertTriangle } from 'lucide-vue-next';
 import type { Import } from '@/types/import';
@@ -33,6 +34,14 @@ const stats = [
   { label: 'Failed', value: imp.failed_rows, icon: XCircle, color: 'text-danger', bg: 'bg-danger-light' },
   { label: 'Duplicates', value: imp.duplicate_rows, icon: Copy, color: 'text-warning', bg: 'bg-warning-light' },
 ];
+
+function firstItems(items?: Array<{ name: string }>) {
+  return (items ?? []).slice(0, 3);
+}
+
+function remainingItems(items?: Array<{ name: string }>) {
+  return (items ?? []).slice(3);
+}
 </script>
 
 <template>
@@ -91,11 +100,49 @@ const stats = [
             </div>
             <div class="flex justify-between">
               <dt class="text-muted">Duplicate Handling</dt>
-              <dd class="font-medium text-foreground capitalize">{{ importData.duplicate_handling }}</dd>
+              <dd class="font-medium text-foreground capitalize">{{ importData.duplicate_handling.replaceAll('_', ' ') }}</dd>
             </div>
             <div class="flex justify-between">
               <dt class="text-muted">Phone Column</dt>
               <dd class="font-medium text-foreground">{{ importData.phone_column ?? '—' }}</dd>
+            </div>
+            <div class="flex items-start justify-between gap-4">
+              <dt class="text-muted">Lists</dt>
+              <dd class="flex max-w-72 flex-wrap justify-end gap-1">
+                <span
+                  v-for="list in firstItems(importData.lists)"
+                  :key="list.name"
+                  class="inline-flex max-w-40 items-center rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700"
+                >
+                  <span class="truncate">{{ list.name }}</span>
+                </span>
+                <BadgeOverflowPopover
+                  v-if="remainingItems(importData.lists).length"
+                  :items="remainingItems(importData.lists)"
+                  title="Lists"
+                  tone="list"
+                />
+                <span v-if="!importData.lists?.length" class="font-medium text-foreground">—</span>
+              </dd>
+            </div>
+            <div class="flex items-start justify-between gap-4">
+              <dt class="text-muted">Tags</dt>
+              <dd class="flex max-w-72 flex-wrap justify-end gap-1">
+                <span
+                  v-for="tag in firstItems(importData.tags)"
+                  :key="tag.name"
+                  class="inline-flex max-w-40 items-center rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary"
+                >
+                  <span class="truncate">{{ tag.name }}</span>
+                </span>
+                <BadgeOverflowPopover
+                  v-if="remainingItems(importData.tags).length"
+                  :items="remainingItems(importData.tags)"
+                  title="Tags"
+                  tone="tag"
+                />
+                <span v-if="!importData.tags?.length" class="font-medium text-foreground">—</span>
+              </dd>
             </div>
             <div class="flex justify-between">
               <dt class="text-muted">Created</dt>

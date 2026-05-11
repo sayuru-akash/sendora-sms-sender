@@ -120,21 +120,12 @@ class DashboardController extends Controller
             ->pluck('count', 'status');
 
         // Recent activity log
+        $recentActivityLimit = 8;
         $activityLog = Activity::with('causer')
             ->latest()
-            ->limit(15)
+            ->limit($recentActivityLimit)
             ->get()
-            ->map(fn ($log) => [
-                'id' => $log->id,
-                'event' => $log->event,
-                'description' => $log->description,
-                'subject_type' => $log->subject_type,
-                'subject_id' => $log->subject_id,
-                'causer_id' => $log->causer_id,
-                'causer_name' => $log->causer?->name,
-                'properties' => $log->properties,
-                'created_at' => $log->created_at?->toISOString(),
-            ]);
+            ->map(fn (Activity $log): array => ActivityLogController::formatActivity($log));
 
         return Inertia::render('Dashboard', [
             'stats' => [
@@ -153,6 +144,8 @@ class DashboardController extends Controller
             'top_tags' => $topTags,
             'contacts_by_status' => $contactsByStatus,
             'activity_log' => $activityLog,
+            'activity_log_limit' => $recentActivityLimit,
+            'activity_log_total' => Activity::count(),
         ]);
     }
 }

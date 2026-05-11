@@ -39,6 +39,33 @@ class ContactTest extends TestCase
         ]);
     }
 
+    public function test_can_create_contact_with_lists_and_tags(): void
+    {
+        $list = ListModel::factory()->create();
+        $tag = Tag::factory()->create();
+
+        $response = $this->actingAs($this->user)->postJson('/contacts', [
+            'first_name' => 'List',
+            'last_name' => 'Tagged',
+            'phone' => '0771234567',
+            'status' => 'active',
+            'lists' => [$list->id],
+            'tags' => [$tag->id],
+        ]);
+
+        $response->assertStatus(201);
+
+        $contact = Contact::where('phone_normalised', '94771234567')->firstOrFail();
+
+        $this->assertTrue($contact->lists()->where('lists.id', $list->id)->exists());
+        $this->assertTrue($contact->tags()->where('tags.id', $tag->id)->exists());
+        $this->assertDatabaseHas('activity_log', [
+            'subject_type' => Contact::class,
+            'subject_id' => $contact->id,
+            'event' => 'created',
+        ]);
+    }
+
     public function test_phone_is_normalized_on_create(): void
     {
         $this->actingAs($this->user)->postJson('/contacts', [

@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Jobs\FinalizeCampaign;
 use App\Jobs\PrepareCampaignRecipients;
+use App\Jobs\SendCampaignMessages;
 use App\Jobs\SendSingleSms;
 use App\Models\CampaignRecipient;
 use App\Models\Contact;
@@ -311,6 +312,37 @@ class CampaignTest extends TestCase
         $recipient = CampaignRecipient::where('campaign_id', $campaign->id)->firstOrFail();
 
         $this->assertSame('Hi Nimal Perera, SITC in Colombo/Colombo', $recipient->personalised_message);
+    }
+
+    public function test_send_campaign_messages_queues_every_pending_recipient_when_status_changes_during_iteration(): void
+    {
+        Queue::fake([SendSingleSms::class]);
+
+        $campaign = SmsCampaign::factory()->sending()->create([
+            'total_recipients' => 125,
+            'pending_count' => 125,
+            'queued_count' => 0,
+            'sent_count' => 0,
+        ]);
+
+        Contact::factory()->active()->count(125)->create()->each(function (Contact $contact) use ($campaign): void {
+            CampaignRecipient::create([
+                'campaign_id' => $campaign->id,
+                'contact_id' => $contact->id,
+                'phone_normalised' => $contact->phone_normalised,
+                'status' => 'pending',
+            ]);
+        });
+
+        (new SendCampaignMessages($campaign))->handle(app(ActivityLogger::class));
+
+        $campaign->refresh();
+
+        $this->assertSame(0, CampaignRecipient::where('campaign_id', $campaign->id)->where('status', 'pending')->count());
+        $this->assertSame(125, CampaignRecipient::where('campaign_id', $campaign->id)->where('status', 'queued')->count());
+        $this->assertSame(125, $campaign->pending_count);
+        $this->assertSame(125, $campaign->queued_count);
+        Queue::assertPushed(SendSingleSms::class, 125);
     }
 
     public function test_send_single_sms_personalises_legacy_recipient_without_prepared_message(): void

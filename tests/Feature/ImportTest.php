@@ -2,13 +2,19 @@
 
 namespace Tests\Feature;
 
+use App\Jobs\ProcessImport;
 use App\Models\Contact;
 use App\Models\Import;
 use App\Models\ImportRow;
+use App\Models\ListModel;
+use App\Models\Tag;
 use App\Models\User;
+use App\Services\ActivityLogger;
 use App\Services\PhoneNormalizer;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class ImportTest extends TestCase
@@ -25,24 +31,36 @@ class ImportTest extends TestCase
 
     public function test_can_upload_csv(): void
     {
+        $list = ListModel::factory()->create();
+        $tag = Tag::factory()->create();
         $csvContent = "first_name,last_name,phone\nJohn,Doe,0771234567\nJane,Smith,0779876543";
         $file = UploadedFile::fake()->createWithContent('contacts.csv', $csvContent);
 
         $response = $this->actingAs($this->user)->postJson('/imports/upload', [
             'file' => $file,
             'type' => 'csv',
+            'duplicate_handling' => 'add_to_list',
+            'list_ids' => [$list->id],
+            'tag_ids' => [$tag->id],
         ]);
 
         $response->assertStatus(201);
         $this->assertDatabaseHas('imports', [
             'original_filename' => 'contacts.csv',
             'type' => 'csv',
+            'list_id' => $list->id,
         ]);
+
+        $import = Import::where('original_filename', 'contacts.csv')->firstOrFail();
+
+        $this->assertSame('add_to_list', $import->options['duplicate_handling']);
+        $this->assertSame([$list->id], $import->options['list_ids']);
+        $this->assertSame([$tag->id], $import->options['tag_ids']);
     }
 
     public function test_phone_normalized_on_import(): void
     {
-        $normalizer = new PhoneNormalizer();
+        $normalizer = new PhoneNormalizer;
 
         // Test various formats
         $this->assertEquals('94771234567', $normalizer->normalize('0771234567'));
@@ -110,5 +128,103 @@ class ImportTest extends TestCase
         ]);
 
         $response->assertStatus(422);
+    }
+
+    public function test_confirm_preserves_import_lists_and_tags(): void
+    {
+        Queue::fake();
+
+        $list = ListModel::factory()->create();
+        $tag = Tag::factory()->create();
+        Storage::disk('local')->put('imports/confirm-test.csv', "first_name,phone\nPreserved,0771234567");
+        $import = Import::factory()->create([
+            'created_by' => $this->user->id,
+            'file_path' => 'imports/confirm-test.csv',
+            'type' => 'csv',
+            'options' => [
+                'duplicate_handling' => 'skip',
+                'list_ids' => [$list->id],
+                'tag_ids' => [$tag->id],
+            ],
+        ]);
+
+        $response = $this->actingAs($this->user)->postJson(route('imports.confirm', $import), [
+            'column_mapping' => [
+                'phone' => 'phone',
+                'first_name' => 'first_name',
+            ],
+            'list_ids' => [$list->id],
+            'tag_ids' => [$tag->id],
+            'options' => [
+                'duplicate_handling' => 'update',
+            ],
+        ]);
+
+        $response->assertOk();
+        $import->refresh();
+
+        $this->assertSame('update', $import->options['duplicate_handling']);
+        $this->assertSame([$list->id], $import->options['list_ids']);
+        $this->assertSame([$tag->id], $import->options['tag_ids']);
+        Queue::assertPushed(ProcessImport::class);
+    }
+
+    public function test_process_import_assigns_selected_lists_and_tags_to_new_and_duplicate_contacts(): void
+    {
+        $list = ListModel::factory()->create();
+        $secondList = ListModel::factory()->create();
+        $tag = Tag::factory()->create();
+        $existing = Contact::factory()->create([
+            'phone' => '0771234567',
+            'phone_normalised' => '94771234567',
+        ]);
+        $import = Import::factory()->create([
+            'created_by' => $this->user->id,
+            'column_mapping' => [
+                'phone' => 'phone',
+                'first_name' => 'first_name',
+            ],
+            'options' => [
+                'duplicate_handling' => 'update',
+                'list_ids' => [$list->id, $secondList->id],
+                'tag_ids' => [$tag->id],
+            ],
+        ]);
+
+        ImportRow::create([
+            'import_id' => $import->id,
+            'row_number' => 1,
+            'raw_data' => ['first_name' => 'Updated', 'phone' => '0771234567'],
+            'status' => 'pending',
+        ]);
+        ImportRow::create([
+            'import_id' => $import->id,
+            'row_number' => 2,
+            'raw_data' => ['first_name' => 'New', 'phone' => '0779876543'],
+            'status' => 'pending',
+        ]);
+
+        (new ProcessImport($import))->handle(new PhoneNormalizer, new ActivityLogger);
+
+        $existing->refresh();
+        $created = Contact::where('phone_normalised', '94779876543')->firstOrFail();
+
+        foreach ([$existing, $created] as $contact) {
+            $this->assertEqualsCanonicalizing(
+                [$list->id, $secondList->id],
+                $contact->lists()->pluck('lists.id')->all()
+            );
+            $this->assertSame([$tag->id], $contact->tags()->pluck('tags.id')->all());
+        }
+
+        $import->refresh();
+        $this->assertSame(2, $import->processed_rows);
+        $this->assertSame(2, $import->successful_rows);
+        $this->assertSame(1, $import->duplicate_rows);
+        $this->assertDatabaseHas('activity_log', [
+            'subject_type' => Import::class,
+            'subject_id' => $import->id,
+            'event' => 'import_completed',
+        ]);
     }
 }
