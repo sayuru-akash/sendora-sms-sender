@@ -50,11 +50,14 @@ function clear() {
     <input
       v-model="localValue"
       type="text"
+      :aria-label="placeholder"
       :placeholder="placeholder"
       class="h-10 w-full rounded-lg border border-border bg-white pl-10 pr-8 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors"
     />
     <button
       v-if="localValue"
+      type="button"
+      aria-label="Clear search"
       @click="clear"
       class="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-muted-foreground hover:text-foreground hover:bg-gray-100 transition-colors"
     >

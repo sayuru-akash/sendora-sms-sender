@@ -384,7 +384,9 @@ class CampaignController extends Controller
             abort(422, 'Campaign cannot be sent in its current status: '.$campaign->status);
         }
 
-        $this->dispatchCampaignSend($campaign);
+        if (! $this->dispatchCampaignSend($campaign)) {
+            abort(422, 'Campaign cannot be sent in its current status: '.$campaign->fresh()->status);
+        }
 
         $this->activityLogger->logCampaignSendRequested($campaign->fresh());
 
@@ -481,9 +483,20 @@ class CampaignController extends Controller
             ->with('success', 'Recipient queued for resend.');
     }
 
-    protected function dispatchCampaignSend(SmsCampaign $campaign): void
+    protected function dispatchCampaignSend(SmsCampaign $campaign): bool
     {
-        $campaign->markQueued();
+        $claimed = SmsCampaign::whereKey($campaign->id)
+            ->whereIn('status', ['draft', 'scheduled'])
+            ->update([
+                'status' => 'queued',
+                'updated_at' => now(),
+            ]);
+
+        if ($claimed !== 1) {
+            return false;
+        }
+
+        $campaign->refresh();
         $this->activityLogger->logCampaignQueued($campaign->fresh());
 
         PrepareCampaignRecipients::dispatch($campaign)
@@ -491,6 +504,8 @@ class CampaignController extends Controller
                 new SendCampaignMessages($campaign),
                 new FinalizeCampaign($campaign),
             ]);
+
+        return true;
     }
 
     /**

@@ -15,6 +15,12 @@ class UserController extends Controller
     {
         $this->authorize('viewAny', User::class);
 
+        $request->merge([
+            'role' => $this->validRole($request),
+            'status' => $this->validStatus($request),
+            'per_page' => $this->perPage($request),
+        ]);
+
         $users = User::when($request->search, function ($q, $search) {
             $search = '%'.mb_strtolower($search).'%';
 
@@ -25,11 +31,16 @@ class UserController extends Controller
         })
             ->when($request->role, fn ($q, $role) => $q->where('role', $role))
             ->when($request->status, fn ($q, $status) => $q->where('status', $status))
-            ->latest()
-            ->get();
+            ->latest('id');
 
         return Inertia::render('Users/Index', [
-            'users' => $users,
+            'users' => $this->paginate($users, $request, 25),
+            'filters' => $request->only(['search', 'role', 'status', 'per_page']),
+            'filterOptions' => [
+                'roles' => ['owner', 'admin', 'manager', 'staff', 'viewer'],
+                'statuses' => ['active', 'inactive', 'suspended'],
+                'perPage' => [10, 25, 50, 100],
+            ],
         ]);
     }
 
@@ -115,5 +126,26 @@ class UserController extends Controller
 
         return redirect()->route('users.index')
             ->with('success', 'User deleted successfully.');
+    }
+
+    private function validRole(Request $request): ?string
+    {
+        $role = $request->string('role')->toString();
+
+        return in_array($role, ['owner', 'admin', 'manager', 'staff', 'viewer'], true) ? $role : null;
+    }
+
+    private function validStatus(Request $request): ?string
+    {
+        $status = $request->string('status')->toString();
+
+        return in_array($status, ['active', 'inactive', 'suspended'], true) ? $status : null;
+    }
+
+    private function perPage(Request $request): int
+    {
+        $perPage = $request->integer('per_page', 25);
+
+        return in_array($perPage, [10, 25, 50, 100], true) ? $perPage : 25;
     }
 }

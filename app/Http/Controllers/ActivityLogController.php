@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\User;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -11,6 +12,10 @@ class ActivityLogController extends Controller
 {
     public function index(Request $request): Response
     {
+        $request->merge([
+            'per_page' => $this->perPage($request),
+        ]);
+
         $activities = $this->paginate(
             Activity::with('causer')
                 ->when($request->search, function ($q, $search) {
@@ -46,6 +51,26 @@ class ActivityLogController extends Controller
         return Inertia::render('ActivityLogs/Index', [
             'activities' => $activities,
             'filters' => $request->only(['search', 'event', 'log_name', 'causer_id', 'subject_type', 'subject_id', 'per_page']),
+            'filterOptions' => [
+                'events' => $this->activityOptionValues('event'),
+                'logNames' => $this->activityOptionValues('log_name'),
+                'subjectTypes' => $this->activityOptionValues('subject_type'),
+                'causers' => User::query()
+                    ->whereIn('id', Activity::query()
+                        ->where('causer_type', User::class)
+                        ->whereNotNull('causer_id')
+                        ->select('causer_id'))
+                    ->orderBy('name')
+                    ->limit(100)
+                    ->get(['id', 'name', 'email'])
+                    ->map(fn (User $user): array => [
+                        'id' => $user->id,
+                        'name' => $user->name,
+                        'email' => $user->email,
+                    ])
+                    ->all(),
+                'perPage' => [10, 25, 50, 100],
+            ],
         ]);
     }
 
@@ -65,9 +90,32 @@ class ActivityLogController extends Controller
             'subject_action_label' => self::subjectActionLabel($activity),
             'causer_id' => $activity->causer_id,
             'causer_name' => $activity->causer?->name,
+            'causer_email' => $activity->causer?->email,
             'properties' => $activity->properties?->toArray() ?? [],
             'created_at' => $activity->created_at?->toISOString(),
         ];
+    }
+
+    private function perPage(Request $request): int
+    {
+        $perPage = $request->integer('per_page', 25);
+
+        return in_array($perPage, [10, 25, 50, 100], true) ? $perPage : 25;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function activityOptionValues(string $column): array
+    {
+        return Activity::query()
+            ->whereNotNull($column)
+            ->where($column, '!=', '')
+            ->distinct()
+            ->orderBy($column)
+            ->pluck($column)
+            ->values()
+            ->all();
     }
 
     private static function subjectName(Activity $activity): ?string

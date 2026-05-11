@@ -17,7 +17,18 @@ Schedule::call(function () {
     $dueCampaigns = SmsCampaign::due()->get();
 
     foreach ($dueCampaigns as $campaign) {
-        $campaign->markQueued();
+        $claimed = SmsCampaign::whereKey($campaign->id)
+            ->where('status', 'scheduled')
+            ->update([
+                'status' => 'queued',
+                'updated_at' => now(),
+            ]);
+
+        if ($claimed !== 1) {
+            continue;
+        }
+
+        $campaign->refresh();
 
         PrepareCampaignRecipients::dispatch($campaign)
             ->chain([

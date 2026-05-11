@@ -131,6 +131,9 @@ const campaignPerformanceOption = computed(() => ({
   ],
 }));
 
+const hasContactGrowthData = computed(() => props.contact_growth.some((item) => item.count > 0));
+const hasCampaignPerformanceData = computed(() => props.campaign_performance.some((item) => item.sent > 0 || item.failed > 0));
+
 const quickActions = [
   { label: 'Add Contact', icon: UserPlus, href: route('contacts.create'), color: 'bg-indigo-50 text-indigo-600' },
   { label: 'Import Contacts', icon: Upload, href: route('imports.create'), color: 'bg-emerald-50 text-emerald-600' },
@@ -211,10 +214,16 @@ const quickActions = [
         </CardHeader>
         <CardContent>
           <VChart
+            v-if="hasContactGrowthData"
             :option="contactGrowthOption"
             :autoresize="true"
             style="height: 280px"
           />
+          <div v-else role="status" class="flex h-[280px] flex-col items-center justify-center rounded-lg border border-dashed border-border bg-gray-50/60 px-6 text-center">
+            <Users class="mb-3 h-8 w-8 text-muted-foreground" />
+            <p class="text-sm font-medium text-foreground">No contact growth yet</p>
+            <p class="mt-1 text-xs text-muted">Imported or created contacts will appear here.</p>
+          </div>
         </CardContent>
       </Card>
 
@@ -224,10 +233,16 @@ const quickActions = [
         </CardHeader>
         <CardContent>
           <VChart
+            v-if="hasCampaignPerformanceData"
             :option="campaignPerformanceOption"
             :autoresize="true"
             style="height: 280px"
           />
+          <div v-else role="status" class="flex h-[280px] flex-col items-center justify-center rounded-lg border border-dashed border-border bg-gray-50/60 px-6 text-center">
+            <Send class="mb-3 h-8 w-8 text-muted-foreground" />
+            <p class="text-sm font-medium text-foreground">No campaign performance yet</p>
+            <p class="mt-1 text-xs text-muted">Sent campaign results will appear here.</p>
+          </div>
         </CardContent>
       </Card>
     </div>

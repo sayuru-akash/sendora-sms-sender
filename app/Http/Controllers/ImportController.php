@@ -15,6 +15,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 use League\Csv\Reader;
@@ -152,6 +153,7 @@ class ImportController extends Controller
     public function preview(ImportMappingRequest $request, Import $import): JsonResponse
     {
         $mapping = $request->input('column_mapping');
+        $this->assertMappedColumnsExist($import, $mapping);
         $sampleRows = $this->getSampleRows($import->file_path, $import->type, 10);
 
         $preview = [];
@@ -176,6 +178,8 @@ class ImportController extends Controller
      */
     public function confirm(ImportMappingRequest $request, Import $import)
     {
+        $this->assertMappedColumnsExist($import, $request->input('column_mapping'));
+
         $import = DB::transaction(function () use ($request, $import): Import {
             $import = Import::whereKey($import->id)->lockForUpdate()->firstOrFail();
 
@@ -580,6 +584,23 @@ class ImportController extends Controller
     private function normaliseDuplicateHandling(?string $duplicateHandling): string
     {
         return $duplicateHandling === 'add' ? 'add_to_list' : ($duplicateHandling ?: 'skip');
+    }
+
+    /**
+     * @param  array<string, string|null>  $mapping
+     */
+    private function assertMappedColumnsExist(Import $import, array $mapping): void
+    {
+        $headers = $this->getHeaders($import->file_path, $import->type);
+        $missing = collect($mapping)
+            ->filter(fn ($column) => is_string($column) && $column !== '' && ! in_array($column, $headers, true))
+            ->keys()
+            ->mapWithKeys(fn ($field) => ["column_mapping.{$field}" => 'Selected column does not exist in the uploaded file.'])
+            ->all();
+
+        if ($missing !== []) {
+            throw ValidationException::withMessages($missing);
+        }
     }
 
     /**

@@ -62,16 +62,8 @@ class TextWareProvider implements SmsProviderInterface
                 'body' => $body,
             ];
 
-            if ($response->successful()) {
-                // Try to extract a message ID from the response
-                $providerMessageId = null;
-                if ($response->header('Content-Type') && str_contains($response->header('Content-Type'), 'json')) {
-                    $json = $response->json();
-                    $rawResponse['json'] = $json;
-                    $providerMessageId = $json['message_id'] ?? $json['id'] ?? null;
-                } elseif (preg_match('/Operation success:\s*(\S+)/i', $body, $matches)) {
-                    $providerMessageId = $matches[1];
-                }
+            if ($response->successful() && $this->isSuccessfulProviderBody($body, $response->header('Content-Type'), $rawResponse)) {
+                $providerMessageId = $this->extractProviderMessageId($body, $rawResponse['json'] ?? null);
 
                 Log::info('SMS sent successfully', [
                     'provider' => $this->getName(),
@@ -147,5 +139,57 @@ class TextWareProvider implements SmsProviderInterface
         $summary = preg_replace('/\s+/', ' ', $summary) ?? $summary;
 
         return $summary === '' ? 'No response body.' : Str::limit($summary, 240);
+    }
+
+    /**
+     * @param  array<string, mixed>  $rawResponse
+     */
+    private function isSuccessfulProviderBody(string $body, ?string $contentType, array &$rawResponse): bool
+    {
+        $summary = mb_strtolower(trim(strip_tags($body)));
+
+        if ($summary === '') {
+            return false;
+        }
+
+        if (preg_match('/\b(invalid|fail(?:ed|ure)?|error|denied|unauthori[sz]ed|rejected|insufficient)\b/i', $summary)) {
+            return false;
+        }
+
+        if ($contentType && str_contains($contentType, 'json')) {
+            $json = json_decode($body, true);
+            $rawResponse['json'] = $json;
+
+            if (! is_array($json)) {
+                return false;
+            }
+
+            $status = mb_strtolower((string) ($json['status'] ?? $json['state'] ?? $json['result'] ?? ''));
+
+            return ($json['success'] ?? null) === true
+                || in_array($status, ['success', 'sent', 'ok', 'queued', 'accepted'], true)
+                || isset($json['message_id'])
+                || isset($json['id']);
+        }
+
+        return preg_match('/\b(operation\s+success|success|sent|queued|accepted|ok)\b/i', $summary) === 1;
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $json
+     */
+    private function extractProviderMessageId(string $body, ?array $json): ?string
+    {
+        if ($json) {
+            $id = $json['message_id'] ?? $json['id'] ?? null;
+
+            return $id ? (string) $id : null;
+        }
+
+        if (preg_match('/Operation success:\s*(\S+)/i', $body, $matches)) {
+            return $matches[1];
+        }
+
+        return null;
     }
 }

@@ -72,6 +72,12 @@ const listChartOption = computed(() => ({
   yAxis: { type: 'category', data: props.top_lists.map((d) => d.name), axisLine: { lineStyle: { color: '#e5e7eb' } }, axisTick: { show: false }, axisLabel: { color: '#6b7280', fontSize: 11 } },
   series: [{ type: 'bar', data: props.top_lists.map((d) => d.count), itemStyle: { color: '#4f46e5', borderRadius: [0, 4, 4, 0] }, barWidth: '50%' }],
 }));
+
+const hasSmsChartData = computed(() => props.sms_over_time.some((item) => item.sent > 0 || item.failed > 0));
+const hasSourceChartData = computed(() => props.contacts_by_source.some((item) => item.count > 0));
+const hasStatusChartData = computed(() => props.contacts_by_status.some((item) => item.count > 0));
+const hasListChartData = computed(() => props.top_lists.some((item) => item.count > 0));
+const hasTagListData = computed(() => props.top_tags.some((item) => item.count > 0));
 </script>
 
 <template>
@@ -91,13 +97,23 @@ const listChartOption = computed(() => ({
       <Card>
         <CardHeader><CardTitle>SMS Sent Over Time</CardTitle></CardHeader>
         <CardContent>
-          <VChart :option="smsChartOption" :autoresize="true" style="height: 300px" />
+          <VChart v-if="hasSmsChartData" :option="smsChartOption" :autoresize="true" style="height: 300px" />
+          <div v-else role="status" class="flex h-[300px] flex-col items-center justify-center rounded-lg border border-dashed border-border bg-gray-50/60 px-6 text-center">
+            <Send class="mb-3 h-8 w-8 text-muted-foreground" />
+            <p class="text-sm font-medium text-foreground">No SMS activity yet</p>
+            <p class="mt-1 text-xs text-muted">Monthly send and failure trends will appear here.</p>
+          </div>
         </CardContent>
       </Card>
       <Card>
         <CardHeader><CardTitle>Contacts by Source</CardTitle></CardHeader>
         <CardContent>
-          <VChart :option="sourceChartOption" :autoresize="true" style="height: 300px" />
+          <VChart v-if="hasSourceChartData" :option="sourceChartOption" :autoresize="true" style="height: 300px" />
+          <div v-else role="status" class="flex h-[300px] flex-col items-center justify-center rounded-lg border border-dashed border-border bg-gray-50/60 px-6 text-center">
+            <Users class="mb-3 h-8 w-8 text-muted-foreground" />
+            <p class="text-sm font-medium text-foreground">No contact sources yet</p>
+            <p class="mt-1 text-xs text-muted">Imported and manually added contacts will be grouped here.</p>
+          </div>
         </CardContent>
       </Card>
     </div>
@@ -106,23 +122,38 @@ const listChartOption = computed(() => ({
       <Card>
         <CardHeader><CardTitle>Contacts by Status</CardTitle></CardHeader>
         <CardContent>
-          <VChart :option="statusChartOption" :autoresize="true" style="height: 280px" />
+          <VChart v-if="hasStatusChartData" :option="statusChartOption" :autoresize="true" style="height: 280px" />
+          <div v-else role="status" class="flex h-[280px] flex-col items-center justify-center rounded-lg border border-dashed border-border bg-gray-50/60 px-6 text-center">
+            <CheckCircle class="mb-3 h-8 w-8 text-muted-foreground" />
+            <p class="text-sm font-medium text-foreground">No contact statuses yet</p>
+            <p class="mt-1 text-xs text-muted">Active, unsubscribed, and blocked counts will appear here.</p>
+          </div>
         </CardContent>
       </Card>
       <Card>
         <CardHeader><CardTitle>Top Lists by Size</CardTitle></CardHeader>
         <CardContent>
-          <VChart :option="listChartOption" :autoresize="true" style="height: 280px" />
+          <VChart v-if="hasListChartData" :option="listChartOption" :autoresize="true" style="height: 280px" />
+          <div v-else role="status" class="flex h-[280px] flex-col items-center justify-center rounded-lg border border-dashed border-border bg-gray-50/60 px-6 text-center">
+            <Users class="mb-3 h-8 w-8 text-muted-foreground" />
+            <p class="text-sm font-medium text-foreground">No list data yet</p>
+            <p class="mt-1 text-xs text-muted">Lists with contacts will appear here.</p>
+          </div>
         </CardContent>
       </Card>
       <Card>
         <CardHeader><CardTitle>Top Tags by Size</CardTitle></CardHeader>
         <CardContent>
-          <div class="space-y-3">
+          <div v-if="hasTagListData" class="min-h-[280px] space-y-3">
             <div v-for="tag in top_tags" :key="tag.name" class="flex items-center justify-between">
               <span class="text-sm text-foreground">{{ tag.name }}</span>
               <span class="text-sm text-muted font-medium">{{ formatNumber(tag.count) }}</span>
             </div>
+          </div>
+          <div v-else role="status" class="flex h-[280px] flex-col items-center justify-center rounded-lg border border-dashed border-border bg-gray-50/60 px-6 text-center">
+            <XCircle class="mb-3 h-8 w-8 text-muted-foreground" />
+            <p class="text-sm font-medium text-foreground">No tag data yet</p>
+            <p class="mt-1 text-xs text-muted">Tags with contacts will appear here.</p>
           </div>
         </CardContent>
       </Card>

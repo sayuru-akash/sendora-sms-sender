@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { Check, ChevronDown, Search, X } from 'lucide-vue-next';
 import Button from '@/Components/ui/Button.vue';
 import Input from '@/Components/ui/Input.vue';
@@ -35,6 +35,10 @@ const emit = defineEmits<{
 const isOpen = ref(false);
 const query = ref('');
 const root = ref<HTMLElement | null>(null);
+const highlightedIndex = ref(-1);
+const comboboxId = `multi-select-${Math.random().toString(36).slice(2, 10)}`;
+const searchId = `${comboboxId}-search`;
+const listboxId = `${comboboxId}-listbox`;
 
 const selectedOptions = computed(() => props.options.filter((option) => props.modelValue.includes(option.id)));
 const visibleSelected = computed(() => selectedOptions.value.slice(0, props.maxVisible));
@@ -48,6 +52,11 @@ const filteredOptions = computed(() => {
 
   return props.options.filter((option) => option.name.toLowerCase().includes(term));
 });
+const activeDescendantId = computed(() => {
+  const option = filteredOptions.value[highlightedIndex.value];
+
+  return option ? optionId(option.id) : undefined;
+});
 
 function optionColor(option: Option): string | null {
   return option.color ?? option.colour ?? null;
@@ -58,12 +67,32 @@ function toggleOpen(): void {
     return;
   }
 
-  isOpen.value = !isOpen.value;
+  if (isOpen.value) {
+    close();
+
+    return;
+  }
+
+  open();
+}
+
+function open(): void {
+  if (props.disabled) {
+    return;
+  }
+
+  isOpen.value = true;
+  highlightedIndex.value = filteredOptions.value.length > 0 ? 0 : -1;
+
+  nextTick(() => {
+    root.value?.querySelector<HTMLInputElement>(`#${searchId}`)?.focus();
+  });
 }
 
 function close(): void {
   isOpen.value = false;
   query.value = '';
+  highlightedIndex.value = -1;
 }
 
 function isSelected(id: number): boolean {
@@ -82,12 +111,44 @@ function toggleOption(id: number): void {
   emit('update:modelValue', Array.from(selected));
 }
 
+function optionId(id: number): string {
+  return `${comboboxId}-option-${id}`;
+}
+
 function removeOption(id: number): void {
   emit('update:modelValue', props.modelValue.filter((selectedId) => selectedId !== id));
 }
 
 function clear(): void {
   emit('update:modelValue', []);
+}
+
+function moveHighlight(direction: 1 | -1): void {
+  if (!isOpen.value) {
+    open();
+
+    return;
+  }
+
+  const total = filteredOptions.value.length;
+
+  if (total === 0) {
+    highlightedIndex.value = -1;
+
+    return;
+  }
+
+  highlightedIndex.value = (highlightedIndex.value + direction + total) % total;
+}
+
+function selectHighlighted(): void {
+  const option = filteredOptions.value[highlightedIndex.value];
+
+  if (!option) {
+    return;
+  }
+
+  toggleOption(option.id);
 }
 
 function onDocumentPointerDown(event: PointerEvent): void {
@@ -97,10 +158,60 @@ function onDocumentPointerDown(event: PointerEvent): void {
 }
 
 function onKeydown(event: KeyboardEvent): void {
-  if (event.key === 'Escape') {
+  if (event.key === 'Escape' && isOpen.value) {
     close();
   }
 }
+
+function onTriggerKeydown(event: KeyboardEvent): void {
+  if (event.key === 'ArrowDown') {
+    event.preventDefault();
+    open();
+    highlightedIndex.value = 0;
+  }
+
+  if (event.key === 'ArrowUp') {
+    event.preventDefault();
+    open();
+    highlightedIndex.value = filteredOptions.value.length - 1;
+  }
+}
+
+function onSearchKeydown(event: KeyboardEvent): void {
+  if (event.key === 'ArrowDown') {
+    event.preventDefault();
+    moveHighlight(1);
+  }
+
+  if (event.key === 'ArrowUp') {
+    event.preventDefault();
+    moveHighlight(-1);
+  }
+
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    selectHighlighted();
+  }
+
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    close();
+  }
+}
+
+watch(filteredOptions, (options) => {
+  if (!isOpen.value) {
+    return;
+  }
+
+  if (options.length === 0) {
+    highlightedIndex.value = -1;
+
+    return;
+  }
+
+  highlightedIndex.value = Math.min(Math.max(highlightedIndex.value, 0), options.length - 1);
+});
 
 onMounted(() => {
   document.addEventListener('pointerdown', onDocumentPointerDown);
@@ -118,6 +229,12 @@ onBeforeUnmount(() => {
     <button
       type="button"
       :disabled="disabled"
+      role="combobox"
+      :aria-label="placeholder"
+      :aria-expanded="isOpen"
+      :aria-controls="listboxId"
+      :aria-haspopup="'listbox'"
+      :aria-activedescendant="activeDescendantId"
       :class="
         cn(
           'flex min-h-11 w-full items-center justify-between gap-3 rounded-lg border border-border bg-white px-3 py-2 text-left shadow-xs transition-all duration-150',
@@ -127,6 +244,7 @@ onBeforeUnmount(() => {
         )
       "
       @click="toggleOpen"
+      @keydown="onTriggerKeydown"
     >
       <div class="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
         <span v-if="selectedOptions.length === 0" class="text-sm text-muted">
@@ -146,7 +264,12 @@ onBeforeUnmount(() => {
           <span class="truncate">{{ option.name }}</span>
           <span
             class="rounded p-0.5 text-muted-foreground hover:bg-gray-200 hover:text-foreground"
+            role="button"
+            tabindex="0"
+            :aria-label="`Remove ${option.name}`"
             @click.stop="removeOption(option.id)"
+            @keydown.enter.stop.prevent="removeOption(option.id)"
+            @keydown.space.stop.prevent="removeOption(option.id)"
           >
             <X class="h-3 w-3" />
           </span>
@@ -173,27 +296,44 @@ onBeforeUnmount(() => {
     >
       <div
         v-if="isOpen"
+        :id="listboxId"
+        role="listbox"
+        aria-multiselectable="true"
         class="absolute z-40 mt-2 w-full overflow-hidden rounded-xl border border-border bg-white shadow-lg"
       >
         <div class="border-b border-border p-2">
           <div class="relative">
             <Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
+              :id="searchId"
               v-model="query"
+              role="searchbox"
+              :aria-controls="listboxId"
+              :aria-activedescendant="activeDescendantId"
               :placeholder="searchPlaceholder"
               class="pl-9"
               autofocus
+              @keydown="onSearchKeydown"
             />
           </div>
         </div>
 
         <div class="max-h-64 overflow-y-auto p-1">
           <button
-            v-for="option in filteredOptions"
+            v-for="(option, index) in filteredOptions"
             :key="option.id"
+            :id="optionId(option.id)"
             type="button"
-            class="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-gray-50"
+            role="option"
+            :aria-selected="isSelected(option.id)"
+            :class="
+              cn(
+                'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-gray-50',
+                highlightedIndex === index && 'bg-gray-50'
+              )
+            "
             @click="toggleOption(option.id)"
+            @mouseenter="highlightedIndex = index"
           >
             <span
               :class="
@@ -216,14 +356,14 @@ onBeforeUnmount(() => {
             </span>
           </button>
 
-          <div v-if="filteredOptions.length === 0" class="px-3 py-8 text-center text-sm text-muted">
+          <div v-if="filteredOptions.length === 0" role="status" class="px-3 py-8 text-center text-sm text-muted">
             {{ emptyText }}
           </div>
         </div>
 
         <div v-if="selectedOptions.length" class="flex items-center justify-between border-t border-border px-3 py-2">
           <span class="text-xs text-muted">{{ selectedOptions.length }} selected</span>
-          <Button variant="ghost" size="sm" @click="clear">Clear</Button>
+          <Button variant="ghost" size="sm" aria-label="Clear selected options" @click="clear">Clear</Button>
         </div>
       </div>
     </Transition>

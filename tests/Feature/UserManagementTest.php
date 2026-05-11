@@ -86,7 +86,7 @@ class UserManagementTest extends TestCase
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Users/Index')
-                ->where('users.0.name', 'Searchable Manager')
+                ->where('users.data.0.name', 'Searchable Manager')
             );
     }
 
@@ -108,8 +108,25 @@ class UserManagementTest extends TestCase
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Users/Index')
-                ->where('users.0.id', $manager->id)
-                ->has('users', 1)
+                ->where('users.data.0.id', $manager->id)
+                ->where('users.meta.total', 1)
+            );
+    }
+
+    public function test_users_index_exposes_filters_and_pagination(): void
+    {
+        $owner = User::factory()->owner()->create();
+        User::factory()->staff()->count(3)->create(['status' => 'active']);
+
+        $this->actingAs($owner)
+            ->get('/users?role=staff&status=active&per_page=10')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Users/Index')
+                ->where('filters.role', 'staff')
+                ->where('filters.status', 'active')
+                ->where('users.meta.per_page', 10)
+                ->where('users.meta.total', 3)
             );
     }
 

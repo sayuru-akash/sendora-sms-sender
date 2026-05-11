@@ -151,6 +151,7 @@ export interface ActivityLog {
     subject_action_label: string | null;
     causer_id: number | null;
     causer_name: string | null;
+    causer_email: string | null;
     properties: Record<string, unknown>;
     created_at: string;
 }

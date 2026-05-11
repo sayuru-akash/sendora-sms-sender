@@ -197,6 +197,33 @@ class ImportTest extends TestCase
         Queue::assertPushed(ProcessImport::class, 1);
     }
 
+    public function test_import_confirm_rejects_mapping_columns_not_in_file(): void
+    {
+        Queue::fake();
+
+        Storage::disk('local')->put('imports/bad-mapping.csv', "first_name,phone\nFirst,0771234567");
+        $import = Import::factory()->create([
+            'created_by' => $this->user->id,
+            'file_path' => 'imports/bad-mapping.csv',
+            'type' => 'csv',
+            'status' => 'uploaded',
+        ]);
+
+        $this->actingAs($this->user)->postJson(route('imports.confirm', $import), [
+            'column_mapping' => [
+                'phone' => 'missing_phone',
+                'first_name' => 'first_name',
+            ],
+            'options' => [
+                'duplicate_handling' => 'skip',
+            ],
+        ])->assertJsonValidationErrors('column_mapping.phone');
+
+        $this->assertSame('uploaded', $import->fresh()->status);
+        $this->assertSame(0, ImportRow::where('import_id', $import->id)->count());
+        Queue::assertNothingPushed();
+    }
+
     public function test_process_import_assigns_selected_lists_and_tags_to_new_and_duplicate_contacts(): void
     {
         $list = ListModel::factory()->create();

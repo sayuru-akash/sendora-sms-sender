@@ -118,6 +118,48 @@ class SmsProviderTest extends TestCase
         $this->assertNotNull($result->errorMessage);
     }
 
+    public function test_provider_returns_failure_on_http_200_error_body(): void
+    {
+        config()->set('sms.username', 'testuser');
+        config()->set('sms.password', 'testpass');
+        config()->set('sms.source', 'SENDER');
+        config()->set('sms.api_url', 'https://msg.text-ware.com/send_sms.php');
+
+        foreach (['Invalid credentials', 'Operation failed', '', '{"status":"error","message":"Invalid sender"}'] as $body) {
+            Http::fake([
+                'msg.text-ware.com/*' => Http::response(
+                    $body,
+                    200,
+                    str_starts_with($body, '{') ? ['Content-Type' => 'application/json'] : [],
+                ),
+            ]);
+
+            $provider = new TextWareProvider;
+            $result = $provider->send('94771234567', 'Test message');
+
+            $this->assertFalse($result->success, "Expected body [{$body}] to fail.");
+            $this->assertNotNull($result->errorMessage);
+        }
+    }
+
+    public function test_provider_accepts_json_success_response(): void
+    {
+        config()->set('sms.username', 'testuser');
+        config()->set('sms.password', 'testpass');
+        config()->set('sms.source', 'SENDER');
+        config()->set('sms.api_url', 'https://msg.text-ware.com/send_sms.php');
+
+        Http::fake([
+            'msg.text-ware.com/*' => Http::response(['status' => 'success', 'message_id' => 'json-123'], 200),
+        ]);
+
+        $provider = new TextWareProvider;
+        $result = $provider->send('94771234567', 'Test message');
+
+        $this->assertTrue($result->success);
+        $this->assertSame('json-123', $result->providerMessageId);
+    }
+
     public function test_provider_handles_timeout(): void
     {
         config()->set('sms.username', 'testuser');
