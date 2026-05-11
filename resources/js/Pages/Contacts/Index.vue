@@ -36,6 +36,7 @@ import { createColumnHelper } from '@tanstack/vue-table';
 import { h } from 'vue';
 import { formatNumber } from '@/lib/utils';
 import { useConfirm } from '@/composables/useConfirm';
+import { toast } from 'vue-sonner';
 
 const props = defineProps<{
   contacts: { data: Contact[]; meta: Pagination };
@@ -47,6 +48,9 @@ const props = defineProps<{
 const { confirm } = useConfirm();
 const search = ref(props.filters.search ?? '');
 const filtersOpen = ref(false);
+const bulkProcessing = ref(false);
+const bulkTagId = ref('');
+const bulkListId = ref('');
 const selectedFilters = ref({
   status: props.filters.status ?? '',
   tag_id: props.filters.tag_id ?? '',
@@ -116,6 +120,62 @@ async function deleteContact(contact: Contact) {
 
 function exportContacts() {
   window.open(route('contacts.export', { ...selectedFilters.value, search: search.value || undefined }));
+}
+
+async function bulkDelete(rows: Contact[], clearSelection: () => void) {
+  const confirmed = await confirm({
+    title: 'Delete Contacts',
+    message: `Delete ${rows.length} selected contact${rows.length === 1 ? '' : 's'}? This action cannot be undone.`,
+    confirmLabel: 'Delete',
+    variant: 'destructive',
+  });
+
+  if (!confirmed) return;
+
+  await runBulkAction({ action: 'delete', contact_ids: rows.map((row) => row.id) }, clearSelection);
+}
+
+async function bulkAddTag(rows: Contact[], clearSelection: () => void) {
+  if (!bulkTagId.value) {
+    toast.error('Select a tag first');
+    return;
+  }
+
+  await runBulkAction({
+    action: 'tag',
+    contact_ids: rows.map((row) => row.id),
+    tag_ids: [Number(bulkTagId.value)],
+  }, clearSelection);
+  bulkTagId.value = '';
+}
+
+async function bulkAddToList(rows: Contact[], clearSelection: () => void) {
+  if (!bulkListId.value) {
+    toast.error('Select a list first');
+    return;
+  }
+
+  await runBulkAction({
+    action: 'add_to_list',
+    contact_ids: rows.map((row) => row.id),
+    list_id: Number(bulkListId.value),
+  }, clearSelection);
+  bulkListId.value = '';
+}
+
+async function runBulkAction(payload: Record<string, unknown>, clearSelection: () => void) {
+  bulkProcessing.value = true;
+
+  try {
+    const response = await window.axios.post(route('contacts.bulk-action'), payload);
+    toast.success(response.data.message ?? 'Contacts updated');
+    clearSelection();
+    router.reload({ only: ['contacts'] });
+  } catch (error) {
+    toast.error('Bulk action failed');
+  } finally {
+    bulkProcessing.value = false;
+  }
 }
 
 const columnHelper = createColumnHelper<Contact>();
@@ -300,11 +360,19 @@ const columns = [
           </Button>
         </Link>
       </template>
-      <template #bulk-actions="{ rows }">
-        <div class="flex items-center gap-2">
-          <Button size="sm" variant="outline">Add Tag</Button>
-          <Button size="sm" variant="outline">Add to List</Button>
-          <Button size="sm" variant="destructive">Delete</Button>
+      <template #bulk-actions="{ rows, clearSelection }">
+        <div class="flex flex-wrap items-center gap-2">
+          <Select v-model="bulkTagId" :options="tagOptions" class="w-40" />
+          <Button size="sm" variant="outline" :loading="bulkProcessing" :disabled="!bulkTagId" @click="bulkAddTag(rows, clearSelection)">
+            <Tag class="h-4 w-4" />
+            Add Tag
+          </Button>
+          <Select v-model="bulkListId" :options="listOptions" class="w-40" />
+          <Button size="sm" variant="outline" :loading="bulkProcessing" :disabled="!bulkListId" @click="bulkAddToList(rows, clearSelection)">
+            <List class="h-4 w-4" />
+            Add to List
+          </Button>
+          <Button size="sm" variant="destructive" :loading="bulkProcessing" @click="bulkDelete(rows, clearSelection)">Delete</Button>
         </div>
       </template>
     </DataTable>

@@ -129,7 +129,11 @@ class ProcessImport implements ShouldQueue
                                 }
                             });
 
-                            $row->update(['status' => 'processed', 'contact_id' => $existingContact->id]);
+                            $row->update([
+                                'status' => 'processed',
+                                'contact_id' => $existingContact->id,
+                                'error_message' => 'Duplicate phone number updated.',
+                            ]);
                             $successful++;
                             $duplicates++; // counted as duplicate but still updated
                         } elseif ($duplicateHandling === 'add_to_list') {
@@ -141,7 +145,11 @@ class ProcessImport implements ShouldQueue
                                 $existingContact->tags()->syncWithoutDetaching($tagIds);
                             }
 
-                            $row->update(['status' => 'processed', 'contact_id' => $existingContact->id]);
+                            $row->update([
+                                'status' => 'processed',
+                                'contact_id' => $existingContact->id,
+                                'error_message' => 'Duplicate phone number added to selected lists or tags.',
+                            ]);
                             $successful++;
                             $duplicates++;
                         }
@@ -194,26 +202,30 @@ class ProcessImport implements ShouldQueue
                 }
             }
 
+            $counters = $this->rowCounters();
+
             $this->import->update([
                 'status' => 'completed',
                 'completed_at' => now(),
-                'processed_rows' => $processed,
-                'successful_rows' => $successful,
-                'failed_rows' => $failed,
-                'duplicate_rows' => $duplicates,
-                'invalid_rows' => $invalid,
+                'processed_rows' => $counters['processed_rows'],
+                'successful_rows' => $counters['successful_rows'],
+                'failed_rows' => $counters['failed_rows'],
+                'duplicate_rows' => $counters['duplicate_rows'],
+                'invalid_rows' => $counters['invalid_rows'],
             ]);
 
             $activityLogger->logBulkImportCompleted($this->import);
         } catch (\Exception $e) {
+            $counters = $this->rowCounters();
+
             $this->import->update([
                 'status' => 'failed',
                 'completed_at' => now(),
-                'processed_rows' => $processed,
-                'successful_rows' => $successful,
-                'failed_rows' => $failed,
-                'duplicate_rows' => $duplicates,
-                'invalid_rows' => $invalid,
+                'processed_rows' => $counters['processed_rows'],
+                'successful_rows' => $counters['successful_rows'],
+                'failed_rows' => $counters['failed_rows'],
+                'duplicate_rows' => $counters['duplicate_rows'],
+                'invalid_rows' => $counters['invalid_rows'],
             ]);
 
             Log::error('Import failed', [
@@ -229,13 +241,52 @@ class ProcessImport implements ShouldQueue
 
     protected function updateImportCounters(int $processed, int $successful, int $failed, int $duplicates, int $invalid): void
     {
+        $counters = $this->rowCounters();
+
         $this->import->update([
-            'processed_rows' => $processed,
-            'successful_rows' => $successful,
-            'failed_rows' => $failed,
-            'duplicate_rows' => $duplicates,
-            'invalid_rows' => $invalid,
+            'processed_rows' => $counters['processed_rows'],
+            'successful_rows' => $counters['successful_rows'],
+            'failed_rows' => $counters['failed_rows'],
+            'duplicate_rows' => $counters['duplicate_rows'],
+            'invalid_rows' => $counters['invalid_rows'],
         ]);
+    }
+
+    public function failed(\Throwable $exception): void
+    {
+        $counters = $this->rowCounters();
+
+        $this->import->update([
+            'status' => 'failed',
+            'completed_at' => now(),
+            'processed_rows' => $counters['processed_rows'],
+            'successful_rows' => $counters['successful_rows'],
+            'failed_rows' => $counters['failed_rows'],
+            'duplicate_rows' => $counters['duplicate_rows'],
+            'invalid_rows' => $counters['invalid_rows'],
+        ]);
+    }
+
+    /**
+     * @return array{processed_rows: int, successful_rows: int, failed_rows: int, duplicate_rows: int, invalid_rows: int}
+     */
+    private function rowCounters(): array
+    {
+        $rows = ImportRow::where('import_id', $this->import->id);
+
+        return [
+            'processed_rows' => (clone $rows)->whereIn('status', ['processed', 'failed', 'skipped'])->count(),
+            'successful_rows' => (clone $rows)->where('status', 'processed')->count(),
+            'failed_rows' => (clone $rows)->where('status', 'failed')->count(),
+            'duplicate_rows' => (clone $rows)->where('error_message', 'like', 'Duplicate phone number%')->count(),
+            'invalid_rows' => (clone $rows)
+                ->where('status', 'failed')
+                ->where(function ($query) {
+                    $query->where('error_message', 'like', '%phone%')
+                        ->orWhere('error_message', 'like', '%Invalid%');
+                })
+                ->count(),
+        ];
     }
 
     /**

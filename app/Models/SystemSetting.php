@@ -2,11 +2,20 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 
 class SystemSetting extends Model
 {
+    public const EDITABLE_SETTINGS = [
+        'company_name' => ['type' => 'string', 'group' => 'general'],
+        'timezone' => ['type' => 'string', 'group' => 'general'],
+        'date_format' => ['type' => 'string', 'group' => 'general'],
+        'default_country_code' => ['type' => 'string', 'group' => 'general'],
+        'max_import_file_size' => ['type' => 'integer', 'group' => 'imports'],
+        'default_duplicate_handling' => ['type' => 'string', 'group' => 'imports'],
+    ];
+
     protected $fillable = [
         'key',
         'value',
@@ -23,7 +32,9 @@ class SystemSetting extends Model
     public static function get(string $key, mixed $default = null): mixed
     {
         $setting = static::where('key', $key)->first();
-        if (!$setting) return $default;
+        if (! $setting) {
+            return $default;
+        }
 
         return match ($setting->type) {
             'integer' => (int) $setting->value,
@@ -50,6 +61,14 @@ class SystemSetting extends Model
                 'is_sensitive' => $isSensitive,
             ]
         );
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public static function editableKeys(): array
+    {
+        return array_keys(self::EDITABLE_SETTINGS);
     }
 
     public function getDecryptedValueAttribute(): mixed

@@ -13,6 +13,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class SendSingleSms implements ShouldQueue
@@ -43,6 +44,59 @@ class SendSingleSms implements ShouldQueue
             return;
         }
 
+        $recipient = CampaignRecipient::with('contact')->find($this->recipient->id);
+
+        if (! $recipient || $recipient->isSent()) {
+            return;
+        }
+
+        $this->recipient = $recipient;
+
+        $sentMessage = SmsMessage::where('campaign_recipient_id', $this->recipient->id)
+            ->where('status', 'sent')
+            ->latest()
+            ->first();
+
+        if ($sentMessage) {
+            $this->recipient->update([
+                'status' => 'sent',
+                'sent_at' => $sentMessage->sent_at ?? now(),
+                'provider_message_id' => $sentMessage->provider_message_id,
+                'provider_response' => $sentMessage->provider_response,
+            ]);
+            $this->refreshCampaignCounts();
+
+            return;
+        }
+
+        if (! $this->recipient->isQueued()) {
+            Log::info('Campaign recipient is no longer queued, skipping SMS', [
+                'campaign_id' => $this->campaign->id,
+                'recipient_id' => $this->recipient->id,
+                'status' => $this->recipient->status,
+            ]);
+
+            return;
+        }
+
+        $claimed = CampaignRecipient::whereKey($this->recipient->id)
+            ->where('status', 'queued')
+            ->where('attempt_count', $this->recipient->attempt_count)
+            ->update([
+                'attempt_count' => DB::raw('attempt_count + 1'),
+                'updated_at' => now(),
+            ]);
+
+        if ($claimed === 0) {
+            Log::info('Campaign recipient was claimed by another send job', [
+                'campaign_id' => $this->campaign->id,
+                'recipient_id' => $this->recipient->id,
+            ]);
+
+            return;
+        }
+
+        $this->recipient->refresh();
         $this->recipient->loadMissing('contact');
 
         $messageBody = $this->recipient->personalised_message;
@@ -62,11 +116,6 @@ class SendSingleSms implements ShouldQueue
             'provider' => $smsService->getProvider()->getName(),
             'status' => 'pending',
         ]);
-
-        // Update attempt count
-        $this->recipient->increment('attempt_count');
-        $this->recipient->refresh();
-        $this->recipient->loadMissing('contact');
 
         $unresolvedPlaceholders = $messagePersonalizer->unresolvedPlaceholders($messageBody);
         if (! empty($unresolvedPlaceholders)) {

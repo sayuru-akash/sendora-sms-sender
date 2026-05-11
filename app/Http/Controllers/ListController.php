@@ -17,7 +17,10 @@ class ListController extends Controller
     {
         $lists = ListModel::withCount('contacts')
             ->when($request->search, fn ($q, $search) => $q->search($search))
-            ->orderBy($request->get('sort_by', 'name'), $request->get('sort_dir', 'asc'))
+            ->orderBy(
+                in_array($request->get('sort_by'), ['name', 'status', 'created_at', 'contacts_count'], true) ? $request->get('sort_by') : 'name',
+                $request->get('sort_dir') === 'desc' ? 'desc' : 'asc',
+            )
             ->get();
 
         return Inertia::render('Lists/Index', [
@@ -50,6 +53,8 @@ class ListController extends Controller
 
     public function show(ListModel $list, Request $request): Response
     {
+        $list->loadCount('contacts');
+
         $contacts = $this->paginate(
             $list->contacts()
                 ->when($request->search, fn ($q, $search) => $q->search($search)),

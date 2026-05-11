@@ -37,6 +37,24 @@ class FinalizeCampaign implements ShouldQueue
             return;
         }
 
+        if ($this->campaign->isPaused()) {
+            Log::info('Campaign is paused, deferring finalization until resume', [
+                'campaign_id' => $this->campaign->id,
+            ]);
+
+            return;
+        }
+
+        CampaignRecipient::where('campaign_id', $this->campaign->id)
+            ->where('status', 'queued')
+            ->where('queued_at', '<', now()->subMinutes(15))
+            ->update([
+                'status' => 'failed',
+                'failed_at' => now(),
+                'error_message' => 'Send job timed out before provider completion.',
+                'updated_at' => now(),
+            ]);
+
         // Count remaining pending/queued recipients
         $pendingCount = CampaignRecipient::where('campaign_id', $this->campaign->id)
             ->whereIn('status', ['pending', 'queued'])

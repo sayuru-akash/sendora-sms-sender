@@ -51,6 +51,11 @@ class ProfileController extends Controller
 
         $user = $request->user();
 
+        if ($user->isAdmin()) {
+            return Redirect::route('profile.edit')
+                ->withErrors(['password' => 'Owner and admin accounts must be managed from User Management.']);
+        }
+
         Auth::logout();
 
         $user->delete();

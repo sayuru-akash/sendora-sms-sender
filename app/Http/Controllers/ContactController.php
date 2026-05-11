@@ -9,6 +9,7 @@ use App\Models\ListModel;
 use App\Models\Tag;
 use App\Services\ActivityLogger;
 use App\Services\PhoneNormalizer;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -26,16 +27,7 @@ class ContactController extends Controller
 
     public function index(Request $request): Response
     {
-        $query = Contact::with(['tags', 'lists'])
-            ->when($request->search, fn ($q, $search) => $q->search($search))
-            ->when($request->status, fn ($q, $status) => $q->byStatus($status))
-            ->when($request->source, fn ($q, $source) => $q->bySource($source))
-            ->when($request->district, fn ($q, $district) => $q->byDistrict($district))
-            ->when($request->city, fn ($q, $city) => $q->byCity($city))
-            ->when($request->tag_id, fn ($q, $tagId) => $q->whereHas('tags', fn ($tq) => $tq->where('tags.id', $tagId)))
-            ->when($request->list_id, fn ($q, $listId) => $q->whereHas('lists', fn ($lq) => $lq->where('lists.id', $listId)))
-            ->when($request->date_from, fn ($q, $from) => $q->where('created_at', '>=', $from))
-            ->when($request->date_to, fn ($q, $to) => $q->where('created_at', '<=', $to));
+        $query = $this->applyContactFilters(Contact::with(['tags', 'lists']), $request);
 
         $sortBy = $request->get('sort_by', 'created_at');
         $sortDir = $request->get('sort_dir', 'desc');
@@ -342,12 +334,7 @@ class ContactController extends Controller
      */
     public function export(Request $request): StreamedResponse
     {
-        $query = Contact::with(['tags', 'lists'])
-            ->when($request->search, fn ($q, $search) => $q->search($search))
-            ->when($request->status, fn ($q, $status) => $q->byStatus($status))
-            ->when($request->source, fn ($q, $source) => $q->bySource($source))
-            ->when($request->tag_id, fn ($q, $tagId) => $q->whereHas('tags', fn ($tq) => $tq->where('tags.id', $tagId)))
-            ->when($request->list_id, fn ($q, $listId) => $q->whereHas('lists', fn ($lq) => $lq->where('lists.id', $listId)));
+        $query = $this->applyContactFilters(Contact::with(['tags', 'lists']), $request);
 
         // If specific IDs are provided
         if ($request->has('contact_ids')) {
@@ -399,5 +386,23 @@ class ContactController extends Controller
 
             fclose($handle);
         }, 200, $headers);
+    }
+
+    /**
+     * @param  Builder<Contact>  $query
+     * @return Builder<Contact>
+     */
+    private function applyContactFilters(Builder $query, Request $request): Builder
+    {
+        return $query
+            ->when($request->search, fn ($q, $search) => $q->search($search))
+            ->when($request->status, fn ($q, $status) => $q->byStatus($status))
+            ->when($request->source, fn ($q, $source) => $q->bySource($source))
+            ->when($request->district, fn ($q, $district) => $q->byDistrict($district))
+            ->when($request->city, fn ($q, $city) => $q->byCity($city))
+            ->when($request->tag_id, fn ($q, $tagId) => $q->whereHas('tags', fn ($tq) => $tq->where('tags.id', $tagId)))
+            ->when($request->list_id, fn ($q, $listId) => $q->whereHas('lists', fn ($lq) => $lq->where('lists.id', $listId)))
+            ->when($request->date_from, fn ($q, $from) => $q->whereDate('created_at', '>=', $from))
+            ->when($request->date_to, fn ($q, $to) => $q->whereDate('created_at', '<=', $to));
     }
 }

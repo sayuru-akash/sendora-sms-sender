@@ -14,16 +14,18 @@ import { Upload, FileSpreadsheet, X, Check } from 'lucide-vue-next';
 import type { ListModel, Tag } from '@/types';
 import { cn } from '@/lib/utils';
 
-defineProps<{
+const props = defineProps<{
   lists: ListModel[];
   tags: Tag[];
+  selected_list_ids?: number[];
+  selected_tag_ids?: number[];
 }>();
 
 const form = useForm({
   file: null as File | null,
   duplicate_handling: 'skip' as string,
-  list_ids: [] as number[],
-  tag_ids: [] as number[],
+  list_ids: [...(props.selected_list_ids ?? [])] as number[],
+  tag_ids: [...(props.selected_tag_ids ?? [])] as number[],
 });
 
 const isDragging = ref(false);

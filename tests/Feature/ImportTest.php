@@ -169,6 +169,34 @@ class ImportTest extends TestCase
         Queue::assertPushed(ProcessImport::class);
     }
 
+    public function test_import_confirm_is_not_double_submitted(): void
+    {
+        Queue::fake();
+
+        Storage::disk('local')->put('imports/double-confirm.csv', "first_name,phone\nFirst,0771234567");
+        $import = Import::factory()->create([
+            'created_by' => $this->user->id,
+            'file_path' => 'imports/double-confirm.csv',
+            'type' => 'csv',
+            'status' => 'uploaded',
+        ]);
+        $payload = [
+            'column_mapping' => [
+                'phone' => 'phone',
+                'first_name' => 'first_name',
+            ],
+            'options' => [
+                'duplicate_handling' => 'skip',
+            ],
+        ];
+
+        $this->actingAs($this->user)->postJson(route('imports.confirm', $import), $payload)->assertOk();
+        $this->actingAs($this->user)->postJson(route('imports.confirm', $import), $payload)->assertStatus(422);
+
+        $this->assertSame(1, ImportRow::where('import_id', $import->id)->count());
+        Queue::assertPushed(ProcessImport::class, 1);
+    }
+
     public function test_process_import_assigns_selected_lists_and_tags_to_new_and_duplicate_contacts(): void
     {
         $list = ListModel::factory()->create();

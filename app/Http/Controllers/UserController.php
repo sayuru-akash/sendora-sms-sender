@@ -15,7 +15,14 @@ class UserController extends Controller
     {
         $this->authorize('viewAny', User::class);
 
-        $users = User::when($request->search, fn ($q, $search) => $q->where('name', 'ilike', "%{$search}%")->orWhere('email', 'ilike', "%{$search}%"))
+        $users = User::when($request->search, function ($q, $search) {
+            $search = '%'.mb_strtolower($search).'%';
+
+            $q->where(function ($query) use ($search) {
+                $query->whereRaw('LOWER(name) LIKE ?', [$search])
+                    ->orWhereRaw('LOWER(email) LIKE ?', [$search]);
+            });
+        })
             ->when($request->role, fn ($q, $role) => $q->where('role', $role))
             ->when($request->status, fn ($q, $status) => $q->where('status', $status))
             ->latest()

@@ -24,16 +24,24 @@ const props = defineProps<{
   tags: Tag[];
   segments: SavedSegment[];
   templates: Template[];
+  initial_audience?: {
+    target_type: string;
+    segment_id?: number | null;
+    list_ids: number[];
+    tag_ids: number[];
+    contact_ids: number[];
+  };
 }>();
 
 const form = useForm({
   name: '',
   sender_id: '',
   message_body: '',
-  target_type: 'all_contacts',
-  list_ids: [] as number[],
-  tag_ids: [] as number[],
-  contact_ids: [] as number[],
+  target_type: props.initial_audience?.target_type ?? 'all_contacts',
+  segment_id: props.initial_audience?.segment_id ? String(props.initial_audience.segment_id) : '',
+  list_ids: [...(props.initial_audience?.list_ids ?? [])] as number[],
+  tag_ids: [...(props.initial_audience?.tag_ids ?? [])] as number[],
+  contact_ids: [...(props.initial_audience?.contact_ids ?? [])] as number[],
   template_id: null as number | null,
   scheduled_at: '',
   notes: '',
@@ -45,7 +53,6 @@ const targetOptions = [
   { label: 'By Tag', value: 'tag' },
   { label: 'By Saved Segment', value: 'saved_segment' },
   { label: 'Manual Selection', value: 'manual_selection' },
-  { label: 'Advanced Filter', value: 'advanced_filter' },
 ];
 
 const templateOptions = [
@@ -66,8 +73,17 @@ const audienceError = computed(() => {
     return 'Select at least one contact.';
   }
 
+  if (form.target_type === 'saved_segment' && !form.segment_id) {
+    return 'Select a saved segment.';
+  }
+
   return '';
 });
+
+const segmentOptions = [
+  { label: 'Choose a saved segment', value: '' },
+  ...props.segments.map((segment) => ({ label: segment.name, value: String(segment.id) })),
+];
 
 function selectTemplate(templateId: string | number) {
   const id = Number(templateId);
@@ -92,6 +108,7 @@ function submit() {
       list_ids: data.target_type === 'list' ? data.list_ids : undefined,
       tag_ids: data.target_type === 'tag' ? data.tag_ids : undefined,
       contact_ids: data.target_type === 'manual_selection' ? data.contact_ids : undefined,
+      segment_id: data.target_type === 'saved_segment' ? data.segment_id : undefined,
     },
     template_id: data.template_id,
     notes: data.notes,
@@ -191,9 +208,12 @@ function validationError(field: string): string | undefined {
             </div>
 
             <div v-if="form.target_type === 'saved_segment'" class="rounded-lg bg-gray-50 p-4">
-              <p class="text-sm text-muted">
-                Saved segment targeting is available in the multi-step campaign builder for a better experience.
+              <Label>Select Segment</Label>
+              <Select v-model="form.segment_id" :options="segmentOptions" />
+              <p v-if="form.errors.segment_id || validationError('target_filters.segment_id')" class="text-xs text-danger">
+                {{ form.errors.segment_id || validationError('target_filters.segment_id') }}
               </p>
+              <p v-if="audienceError && form.target_type === 'saved_segment'" class="text-xs text-danger">{{ audienceError }}</p>
             </div>
 
             <div v-if="form.target_type === 'manual_selection'" class="space-y-1.5">
@@ -204,11 +224,6 @@ function validationError(field: string): string | undefined {
               />
             </div>
 
-            <div v-if="form.target_type === 'advanced_filter'" class="rounded-lg bg-gray-50 p-4">
-              <p class="text-sm text-muted">
-                Advanced filter allows complex filtering. Use the multi-step campaign builder for this option.
-              </p>
-            </div>
           </CardContent>
         </Card>
 

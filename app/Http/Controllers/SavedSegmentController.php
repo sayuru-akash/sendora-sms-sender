@@ -15,7 +15,7 @@ class SavedSegmentController extends Controller
     {
         $segments = $this->paginate(
             SavedSegment::with('creator')
-                ->when($request->search, fn ($q, $search) => $q->where('name', 'ilike', "%{$search}%"))
+                ->when($request->search, fn ($q, $search) => $q->whereRaw('LOWER(name) LIKE ?', ['%'.mb_strtolower($search).'%']))
                 ->latest(),
             $request,
             25

@@ -22,6 +22,8 @@ class SettingController extends Controller
 
     public function index(Request $request): Response
     {
+        abort_unless($request->user()?->canManageSettings(), 403);
+
         $settings = [
             'company_name' => SystemSetting::get('company_name', 'Sendora'),
             'timezone' => SystemSetting::get('timezone', 'Asia/Colombo'),
@@ -40,12 +42,7 @@ class SettingController extends Controller
 
     public function update(SettingRequest $request): JsonResponse
     {
-        $settingsMap = [
-            'company_name' => ['type' => 'string', 'group' => 'general'],
-            'timezone' => ['type' => 'string', 'group' => 'general'],
-            'date_format' => ['type' => 'string', 'group' => 'general'],
-            'default_country_code' => ['type' => 'string', 'group' => 'general'],
-        ];
+        $settingsMap = SystemSetting::EDITABLE_SETTINGS;
 
         foreach ($settingsMap as $key => $config) {
             if ($request->has($key)) {
@@ -61,11 +58,17 @@ class SettingController extends Controller
         // Also handle legacy format (settings array)
         $settingsData = $request->input('settings', []);
         foreach ($settingsData as $settingData) {
+            if (! isset($settingsMap[$settingData['key']])) {
+                continue;
+            }
+
+            $config = $settingsMap[$settingData['key']];
+
             SystemSetting::set(
                 $settingData['key'],
                 $settingData['value'],
-                $settingData['type'] ?? 'string',
-                $settingData['group'] ?? 'general',
+                $config['type'],
+                $config['group'],
             );
         }
 

@@ -370,7 +370,8 @@ class CampaignTest extends TestCase
             'campaign_id' => $campaign->id,
             'contact_id' => $contact->id,
             'phone_normalised' => $contact->phone_normalised,
-            'status' => 'pending',
+            'status' => 'queued',
+            'queued_at' => now(),
         ]);
 
         (new SendSingleSms($campaign, $recipient))->handle(
@@ -420,7 +421,8 @@ class CampaignTest extends TestCase
             'campaign_id' => $campaign->id,
             'contact_id' => $contact->id,
             'phone_normalised' => $contact->phone_normalised,
-            'status' => 'pending',
+            'status' => 'queued',
+            'queued_at' => now(),
         ]);
 
         (new SendSingleSms($campaign, $recipient))->handle(
@@ -449,6 +451,46 @@ class CampaignTest extends TestCase
         $this->assertArrayNotHasKey('message_body', $activity->properties->toArray());
 
         Http::assertNothingSent();
+    }
+
+    public function test_duplicate_send_single_sms_job_does_not_call_provider_twice(): void
+    {
+        config()->set('sms.username', 'testuser');
+        config()->set('sms.password', 'testpass');
+        config()->set('sms.source', 'SITC CAMPUS');
+        config()->set('sms.api_url', 'https://msg.text-ware.com/send_sms.php');
+
+        Http::fake([
+            'msg.text-ware.com/*' => Http::response('Operation success: msg123', 200),
+        ]);
+
+        $contact = Contact::factory()->active()->create([
+            'phone_normalised' => '94771111111',
+        ]);
+        $campaign = SmsCampaign::factory()->sending()->create([
+            'message_body' => 'Hello once',
+            'sender_id' => 'SITC CAMPUS',
+        ]);
+        $recipient = CampaignRecipient::create([
+            'campaign_id' => $campaign->id,
+            'contact_id' => $contact->id,
+            'phone_normalised' => $contact->phone_normalised,
+            'status' => 'queued',
+            'queued_at' => now(),
+        ]);
+
+        $job = new SendSingleSms($campaign, $recipient);
+        $job->handle(app(SmsService::class), app(MessagePersonalizer::class), app(ActivityLogger::class));
+
+        (new SendSingleSms($campaign, $recipient->fresh()))->handle(
+            app(SmsService::class),
+            app(MessagePersonalizer::class),
+            app(ActivityLogger::class),
+        );
+
+        Http::assertSentCount(1);
+        $this->assertSame('sent', $recipient->fresh()->status);
+        $this->assertSame(1, $recipient->fresh()->attempt_count);
     }
 
     public function test_campaign_prevents_duplicate_sends(): void
@@ -556,12 +598,13 @@ class CampaignTest extends TestCase
         $recipient->refresh();
         $campaign->refresh();
 
-        $this->assertSame('pending', $recipient->status);
+        $this->assertSame('queued', $recipient->status);
+        $this->assertNotNull($recipient->queued_at);
         $this->assertNull($recipient->failed_at);
         $this->assertNull($recipient->error_message);
         $this->assertSame(1, $recipient->attempt_count);
         $this->assertSame('sending', $campaign->status);
-        $this->assertSame(1, $campaign->pending_count);
+        $this->assertSame(1, $campaign->queued_count);
         $this->assertSame(0, $campaign->failed_count);
 
         Queue::assertPushed(SendSingleSms::class);
@@ -609,10 +652,10 @@ class CampaignTest extends TestCase
 
         $this->assertSame('sending', $campaign->status);
         $this->assertSame(3, $campaign->total_recipients);
-        $this->assertSame(2, $campaign->pending_count);
+        $this->assertSame(2, $campaign->queued_count);
         $this->assertSame(1, $campaign->sent_count);
         $this->assertSame(0, $campaign->failed_count);
-        $this->assertSame(2, CampaignRecipient::where('campaign_id', $campaign->id)->where('status', 'pending')->count());
+        $this->assertSame(2, CampaignRecipient::where('campaign_id', $campaign->id)->where('status', 'queued')->count());
 
         Queue::assertPushed(SendSingleSms::class, 2);
         Queue::assertPushed(FinalizeCampaign::class);
@@ -650,5 +693,58 @@ class CampaignTest extends TestCase
 
         $response->assertStatus(200);
         $this->assertTrue($campaign->fresh()->isCancelled());
+    }
+
+    public function test_pausing_campaign_reclaims_queued_recipients_for_resume(): void
+    {
+        $campaign = SmsCampaign::factory()->sending()->create([
+            'total_recipients' => 1,
+            'queued_count' => 1,
+            'created_by' => $this->manager->id,
+        ]);
+        $contact = Contact::factory()->active()->create();
+        $recipient = CampaignRecipient::create([
+            'campaign_id' => $campaign->id,
+            'contact_id' => $contact->id,
+            'phone_normalised' => $contact->phone_normalised,
+            'status' => 'queued',
+            'queued_at' => now(),
+        ]);
+
+        $this->actingAs($this->manager)->postJson("/campaigns/{$campaign->id}/pause")->assertOk();
+
+        $this->assertTrue($campaign->fresh()->isPaused());
+        $this->assertSame('pending', $recipient->fresh()->status);
+        $this->assertNull($recipient->fresh()->queued_at);
+    }
+
+    public function test_cancelling_campaign_skips_unsent_recipients(): void
+    {
+        $campaign = SmsCampaign::factory()->sending()->create([
+            'total_recipients' => 2,
+            'pending_count' => 1,
+            'queued_count' => 1,
+            'created_by' => $this->manager->id,
+        ]);
+        $contacts = Contact::factory()->active()->count(2)->create();
+
+        foreach (['pending', 'queued'] as $index => $status) {
+            CampaignRecipient::create([
+                'campaign_id' => $campaign->id,
+                'contact_id' => $contacts[$index]->id,
+                'phone_normalised' => $contacts[$index]->phone_normalised,
+                'status' => $status,
+                'queued_at' => $status === 'queued' ? now() : null,
+            ]);
+        }
+
+        $this->actingAs($this->manager)->postJson("/campaigns/{$campaign->id}/cancel")->assertOk();
+
+        $campaign->refresh();
+        $this->assertTrue($campaign->isCancelled());
+        $this->assertSame(2, CampaignRecipient::where('campaign_id', $campaign->id)->where('status', 'skipped')->count());
+        $this->assertSame(2, $campaign->skipped_count);
+        $this->assertSame(0, $campaign->pending_count);
+        $this->assertSame(0, $campaign->queued_count);
     }
 }

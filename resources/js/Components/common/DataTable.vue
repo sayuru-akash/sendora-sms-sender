@@ -96,9 +96,13 @@ const selectedRows = computed(() => {
   return table.getSelectedRowModel().rows.map((row) => row.original);
 });
 
+function clearSelection() {
+  rowSelection.value = {};
+}
+
 import { h } from 'vue';
 
-defineExpose({ selectedRows });
+defineExpose({ selectedRows, clearSelection });
 </script>
 
 <template>
@@ -111,7 +115,7 @@ defineExpose({ selectedRows });
       <span class="text-sm font-medium text-primary">
         {{ selectedRows.length }} selected
       </span>
-      <slot name="bulk-actions" :rows="selectedRows" />
+      <slot name="bulk-actions" :rows="selectedRows" :clear-selection="clearSelection" />
     </div>
 
     <!-- Table -->

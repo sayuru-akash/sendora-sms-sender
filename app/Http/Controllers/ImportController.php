@@ -12,6 +12,7 @@ use App\Models\Tag;
 use App\Services\ActivityLogger;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
@@ -56,7 +57,7 @@ class ImportController extends Controller
     /**
      * Show the upload form.
      */
-    public function create(): Response
+    public function create(Request $request): Response
     {
         $lists = ListModel::active()->orderBy('name')->get(['id', 'name', 'colour']);
         $tags = Tag::orderBy('name')->get(['id', 'name', 'colour']);
@@ -64,6 +65,8 @@ class ImportController extends Controller
         return Inertia::render('Imports/Upload', [
             'lists' => $lists,
             'tags' => $tags,
+            'selected_list_ids' => $request->integer('list_id') > 0 ? [$request->integer('list_id')] : [],
+            'selected_tag_ids' => $request->integer('tag_id') > 0 ? [$request->integer('tag_id')] : [],
         ]);
     }
 
@@ -173,25 +176,35 @@ class ImportController extends Controller
      */
     public function confirm(ImportMappingRequest $request, Import $import)
     {
-        $existingOptions = $import->options ?? [];
-        $requestOptions = $request->input('options', []);
-        $listIds = $this->normaliseIds($request->input('list_ids', $existingOptions['list_ids'] ?? ($import->list_id ? [$import->list_id] : [])));
-        $tagIds = $this->normaliseIds($request->input('tag_ids', $existingOptions['tag_ids'] ?? []));
-        $options = array_merge($existingOptions, $requestOptions, [
-            'duplicate_handling' => $this->normaliseDuplicateHandling($requestOptions['duplicate_handling'] ?? $existingOptions['duplicate_handling'] ?? 'skip'),
-            'list_ids' => $listIds,
-            'tag_ids' => $tagIds,
-        ]);
+        $import = DB::transaction(function () use ($request, $import): Import {
+            $import = Import::whereKey($import->id)->lockForUpdate()->firstOrFail();
 
-        $import->update([
-            'column_mapping' => $request->input('column_mapping'),
-            'options' => $options,
-            'list_id' => $request->input('list_id') ?? collect($listIds)->first(),
-            'status' => 'pending',
-        ]);
+            if (! in_array($import->status, ['uploaded', 'mapping'], true)) {
+                abort(422, 'This import has already been confirmed.');
+            }
 
-        // Create import rows
-        $this->createImportRows($import);
+            $existingOptions = $import->options ?? [];
+            $requestOptions = $request->input('options', []);
+            $listIds = $this->normaliseIds($request->input('list_ids', $existingOptions['list_ids'] ?? ($import->list_id ? [$import->list_id] : [])));
+            $tagIds = $this->normaliseIds($request->input('tag_ids', $existingOptions['tag_ids'] ?? []));
+            $options = array_merge($existingOptions, $requestOptions, [
+                'duplicate_handling' => $this->normaliseDuplicateHandling($requestOptions['duplicate_handling'] ?? $existingOptions['duplicate_handling'] ?? 'skip'),
+                'list_ids' => $listIds,
+                'tag_ids' => $tagIds,
+            ]);
+
+            $import->update([
+                'column_mapping' => $request->input('column_mapping'),
+                'options' => $options,
+                'list_id' => $request->input('list_id') ?? collect($listIds)->first(),
+                'status' => 'pending',
+            ]);
+
+            $import->rows()->delete();
+            $this->createImportRows($import);
+
+            return $import->fresh();
+        });
 
         // Dispatch the import job
         ProcessImport::dispatch($import);

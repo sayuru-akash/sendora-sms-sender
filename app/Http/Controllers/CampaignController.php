@@ -78,11 +78,25 @@ class CampaignController extends Controller
         ]);
     }
 
-    public function builder(): Response
+    public function builder(Request $request): Response
     {
         $lists = ListModel::active()->orderBy('name')->get(['id', 'name', 'colour']);
         $tags = Tag::orderBy('name')->get(['id', 'name', 'colour']);
         $templates = SmsTemplate::active()->orderBy('name')->get(['id', 'name', 'body']);
+        $initialAudience = [
+            'target_type' => 'all_contacts',
+            'list_ids' => [],
+            'tag_ids' => [],
+            'contact_ids' => [],
+        ];
+
+        if ($request->integer('list_id') > 0) {
+            $initialAudience['target_type'] = 'list';
+            $initialAudience['list_ids'] = [$request->integer('list_id')];
+        } elseif ($request->integer('tag_id') > 0) {
+            $initialAudience['target_type'] = 'tag';
+            $initialAudience['tag_ids'] = [$request->integer('tag_id')];
+        }
 
         // Estimated count - all active contacts by default
         $estimatedCount = Contact::where('status', 'active')->count();
@@ -93,6 +107,7 @@ class CampaignController extends Controller
             'templates' => $templates,
             'estimated_count' => $estimatedCount,
             'default_sender_id' => config('sms.source', ''),
+            'initial_audience' => $initialAudience,
         ]);
     }
 
@@ -192,13 +207,28 @@ class CampaignController extends Controller
         ];
     }
 
-    public function create(): Response
+    public function create(Request $request): Response
     {
+        $initialAudience = [
+            'target_type' => $request->integer('segment_id') > 0 ? 'saved_segment' : 'all_contacts',
+            'segment_id' => $request->integer('segment_id') ?: null,
+            'list_ids' => $request->integer('list_id') > 0 ? [$request->integer('list_id')] : [],
+            'tag_ids' => $request->integer('tag_id') > 0 ? [$request->integer('tag_id')] : [],
+            'contact_ids' => [],
+        ];
+
+        if ($initialAudience['list_ids'] !== []) {
+            $initialAudience['target_type'] = 'list';
+        } elseif ($initialAudience['tag_ids'] !== []) {
+            $initialAudience['target_type'] = 'tag';
+        }
+
         return Inertia::render('Campaigns/Create', [
             'lists' => ListModel::active()->orderBy('name')->get(['id', 'name', 'colour']),
             'tags' => Tag::orderBy('name')->get(['id', 'name', 'colour']),
             'segments' => SavedSegment::orderBy('name')->get(['id', 'name', 'description']),
             'templates' => SmsTemplate::active()->orderBy('name')->get(['id', 'name', 'body']),
+            'initial_audience' => $initialAudience,
         ]);
     }
 
@@ -469,8 +499,8 @@ class CampaignController extends Controller
     protected function resetFailedRecipientsForRetry(Collection $recipients): void
     {
         CampaignRecipient::whereKey($recipients->pluck('id')->all())->update([
-            'status' => 'pending',
-            'queued_at' => null,
+            'status' => 'queued',
+            'queued_at' => now(),
             'sent_at' => null,
             'failed_at' => null,
             'provider_message_id' => null,
@@ -518,6 +548,14 @@ class CampaignController extends Controller
         }
 
         $campaign->markPaused();
+        CampaignRecipient::where('campaign_id', $campaign->id)
+            ->where('status', 'queued')
+            ->update([
+                'status' => 'pending',
+                'queued_at' => null,
+                'updated_at' => now(),
+            ]);
+        $this->refreshCampaignRecipientCounts($campaign);
         $this->activityLogger->logCampaignPaused($campaign);
 
         if ($request->expectsJson()) {
@@ -565,6 +603,14 @@ class CampaignController extends Controller
         }
 
         $campaign->markCancelled();
+        CampaignRecipient::where('campaign_id', $campaign->id)
+            ->whereIn('status', ['pending', 'queued'])
+            ->update([
+                'status' => 'skipped',
+                'skip_reason' => 'Campaign cancelled.',
+                'updated_at' => now(),
+            ]);
+        $this->refreshCampaignRecipientCounts($campaign);
         $this->activityLogger->logCampaignCancelled($campaign);
 
         if ($request->expectsJson()) {

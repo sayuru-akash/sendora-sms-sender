@@ -15,7 +15,7 @@ class BulkActionRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'action' => ['required', Rule::in(['delete', 'tag', 'untag', 'add_to_list', 'remove_from_list', 'update_status', 'export'])],
+            'action' => ['required', Rule::in(['delete', 'tag', 'untag', 'add_to_list', 'remove_from_list', 'update_status'])],
             'contact_ids' => ['required', 'array', 'min:1'],
             'contact_ids.*' => ['integer', 'exists:contacts,id'],
             'tag_ids' => ['required_if:action,tag,untag', 'nullable', 'array'],

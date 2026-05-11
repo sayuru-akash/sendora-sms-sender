@@ -95,10 +95,12 @@ async function resendFailedCampaign() {
   ]">
     <PageHeader :title="`Report: ${campaign.name}`">
       <template #actions>
-        <Button variant="outline">
-          <Download class="h-4 w-4" />
-          Export
-        </Button>
+        <a :href="route('reports.campaign.export', campaign.id)" target="_blank" rel="noopener">
+          <Button variant="outline">
+            <Download class="h-4 w-4" />
+            Export
+          </Button>
+        </a>
         <Button v-if="canResendFailed" variant="outline" :loading="isResendingFailed" @click="resendFailedCampaign">
           <RotateCcw class="h-4 w-4" />
           Resend Failed

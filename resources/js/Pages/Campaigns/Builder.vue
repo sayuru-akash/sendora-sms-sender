@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { onMounted, ref, computed, watch } from 'vue';
 import AppLayout from '@/Components/layout/AppLayout.vue';
 import PageHeader from '@/Components/common/PageHeader.vue';
 import Card from '@/Components/ui/Card.vue';
@@ -21,6 +21,7 @@ import type { Tag, ListModel } from '@/types';
 import type { Template } from '@/types/template';
 import { TEMPLATE_VARIABLES } from '@/types/template';
 import { cn, formatNumber } from '@/lib/utils';
+import { useConfirm } from '@/composables/useConfirm';
 
 const props = defineProps<{
   tags: Tag[];
@@ -28,21 +29,28 @@ const props = defineProps<{
   templates: Template[];
   estimated_count: number;
   default_sender_id: string;
+  initial_audience?: {
+    target_type: string;
+    list_ids: number[];
+    tag_ids: number[];
+    contact_ids: number[];
+  };
 }>();
 
 const currentStep = ref(1);
 const totalSteps = 5;
 const estimatedRecipients = ref(props.estimated_count);
 const isEstimating = ref(false);
+const { confirm } = useConfirm();
 
 const form = useForm({
   name: '',
   sender_id: props.default_sender_id,
   message_body: '',
-  target_type: 'all_contacts',
-  list_ids: [] as number[],
-  tag_ids: [] as number[],
-  contact_ids: [] as number[],
+  target_type: props.initial_audience?.target_type ?? 'all_contacts',
+  list_ids: [...(props.initial_audience?.list_ids ?? [])] as number[],
+  tag_ids: [...(props.initial_audience?.tag_ids ?? [])] as number[],
+  contact_ids: [...(props.initial_audience?.contact_ids ?? [])] as number[],
   template_id: null as number | null,
   notes: '',
   scheduled_at: '',
@@ -88,6 +96,12 @@ watch(
   { deep: true },
 );
 
+onMounted(() => {
+  if (form.target_type !== 'all_contacts') {
+    fetchAudienceEstimate();
+  }
+});
+
 function nextStep() {
   if (!canContinue.value) return;
   if (currentStep.value < totalSteps) currentStep.value++;
@@ -116,7 +130,16 @@ function insertVariable(key: string) {
   }
 }
 
-function submit() {
+async function submit() {
+  const confirmed = await confirm({
+    title: form.schedule_enabled ? 'Schedule Campaign' : 'Send Campaign',
+    message: `${form.schedule_enabled ? 'Schedule' : 'Send'} this campaign to about ${formatNumber(estimatedRecipients.value)} recipient${estimatedRecipients.value === 1 ? '' : 's'} using sender ID "${form.sender_id || props.default_sender_id}"?`,
+    confirmLabel: form.schedule_enabled ? 'Schedule' : 'Send Campaign',
+    variant: form.schedule_enabled ? 'default' : 'destructive',
+  });
+
+  if (!confirmed) return;
+
   form.transform((data) => ({
     name: data.name,
     sender_id: data.sender_id,

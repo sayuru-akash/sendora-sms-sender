@@ -39,6 +39,7 @@ const props = defineProps<{
 const { confirm } = useConfirm();
 const search = ref(props.filters.search ?? '');
 const selectedStatus = ref(props.filters.status ?? '');
+const processingCampaignId = ref<number | null>(null);
 let refreshTimer: number | undefined;
 
 const statusOptions = [
@@ -93,20 +94,47 @@ async function deleteCampaign(campaign: Campaign) {
   if (confirmed) router.delete(route('campaigns.destroy', campaign.id));
 }
 
+function postCampaignAction(campaign: Campaign, routeName: string) {
+  processingCampaignId.value = campaign.id;
+  router.post(route(routeName, campaign.id), {}, {
+    preserveScroll: true,
+    onFinish: () => {
+      processingCampaignId.value = null;
+    },
+  });
+}
+
 function pauseCampaign(campaign: Campaign) {
-  router.post(route('campaigns.pause', campaign.id));
+  postCampaignAction(campaign, 'campaigns.pause');
 }
 
 function resumeCampaign(campaign: Campaign) {
-  router.post(route('campaigns.resume', campaign.id));
+  postCampaignAction(campaign, 'campaigns.resume');
 }
 
-function cancelCampaign(campaign: Campaign) {
-  router.post(route('campaigns.cancel', campaign.id));
+async function cancelCampaign(campaign: Campaign) {
+  const confirmed = await confirm({
+    title: 'Cancel Campaign',
+    message: `Cancel "${campaign.name}" and skip all unsent recipients?`,
+    confirmLabel: 'Cancel Campaign',
+    variant: 'destructive',
+  });
+
+  if (confirmed) {
+    postCampaignAction(campaign, 'campaigns.cancel');
+  }
 }
 
-function duplicateCampaign(campaign: Campaign) {
-  router.post(route('campaigns.duplicate', campaign.id));
+async function duplicateCampaign(campaign: Campaign) {
+  const confirmed = await confirm({
+    title: 'Duplicate Campaign',
+    message: `Create a draft copy of "${campaign.name}"?`,
+    confirmLabel: 'Duplicate',
+  });
+
+  if (confirmed) {
+    postCampaignAction(campaign, 'campaigns.duplicate');
+  }
 }
 
 function refreshCampaigns() {
@@ -258,7 +286,7 @@ onBeforeUnmount(() => {
               <DropdownMenu>
                 <template #trigger>
                   <Button variant="ghost" size="icon-sm">
-                    <MoreHorizontal class="h-4 w-4" />
+                    <MoreHorizontal class="h-4 w-4" :class="processingCampaignId === campaign.id && 'animate-pulse'" />
                   </Button>
                 </template>
                 <DropdownMenuItem @select="router.get(route('campaigns.show', campaign.id))">

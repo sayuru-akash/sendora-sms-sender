@@ -15,7 +15,10 @@ class TagController extends Controller
     {
         $tags = Tag::withCount('contacts')
             ->when($request->search, fn ($q, $search) => $q->search($search))
-            ->orderBy($request->get('sort_by', 'name'), $request->get('sort_dir', 'asc'))
+            ->orderBy(
+                in_array($request->get('sort_by'), ['name', 'created_at', 'contacts_count'], true) ? $request->get('sort_by') : 'name',
+                $request->get('sort_dir') === 'desc' ? 'desc' : 'asc',
+            )
             ->get();
 
         return Inertia::render('Tags/Index', [
@@ -47,6 +50,8 @@ class TagController extends Controller
 
     public function show(Tag $tag, Request $request): Response
     {
+        $tag->loadCount('contacts');
+
         $contacts = $this->paginate(
             $tag->contacts()
                 ->when($request->search, fn ($q, $search) => $q->search($search)),

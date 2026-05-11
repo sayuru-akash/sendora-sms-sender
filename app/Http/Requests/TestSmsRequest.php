@@ -9,7 +9,7 @@ class TestSmsRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user() && $this->user()->canSendCampaigns();
+        return $this->user() && $this->user()->canManageSettings();
     }
 
     public function rules(): array

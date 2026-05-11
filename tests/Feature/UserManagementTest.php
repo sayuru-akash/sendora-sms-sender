@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
 class UserManagementTest extends TestCase
@@ -68,6 +69,48 @@ class UserManagementTest extends TestCase
             'email' => 'manager@example.com',
             'role' => 'manager',
         ]);
+    }
+
+    public function test_owner_can_search_users_case_insensitively(): void
+    {
+        $owner = User::factory()->owner()->create();
+        User::factory()->create([
+            'name' => 'Searchable Manager',
+            'email' => 'searchable.manager@example.com',
+            'role' => 'manager',
+        ]);
+
+        $response = $this->actingAs($owner)->get('/users?search=MANAGER');
+
+        $response
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Users/Index')
+                ->where('users.0.name', 'Searchable Manager')
+            );
+    }
+
+    public function test_user_search_stays_scoped_to_role_filter(): void
+    {
+        $owner = User::factory()->owner()->create();
+        $manager = User::factory()->manager()->create([
+            'name' => 'Filtered Search Person',
+            'email' => 'filtered-manager@example.com',
+        ]);
+        User::factory()->admin()->create([
+            'name' => 'Filtered Search Person',
+            'email' => 'filtered-admin@example.com',
+        ]);
+
+        $response = $this->actingAs($owner)->get('/users?search=filtered&role=manager');
+
+        $response
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Users/Index')
+                ->where('users.0.id', $manager->id)
+                ->has('users', 1)
+            );
     }
 
     public function test_admin_cannot_update_owner_or_self(): void

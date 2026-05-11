@@ -132,6 +132,40 @@ class ContactTest extends TestCase
         $response->assertStatus(200);
     }
 
+    public function test_export_uses_same_location_and_date_filters_as_contacts_table(): void
+    {
+        Contact::factory()->create([
+            'first_name' => 'Included',
+            'phone_normalised' => '94771111111',
+            'district' => 'Colombo',
+            'city' => 'Colombo',
+            'created_at' => now()->setDate(2026, 5, 11)->setTime(13, 30),
+        ]);
+        Contact::factory()->create([
+            'first_name' => 'WrongDistrict',
+            'phone_normalised' => '94772222222',
+            'district' => 'Galle',
+            'city' => 'Galle',
+            'created_at' => now()->setDate(2026, 5, 11)->setTime(13, 30),
+        ]);
+        Contact::factory()->create([
+            'first_name' => 'WrongDate',
+            'phone_normalised' => '94773333333',
+            'district' => 'Colombo',
+            'city' => 'Colombo',
+            'created_at' => now()->setDate(2026, 5, 12)->setTime(9, 0),
+        ]);
+
+        $response = $this->actingAs($this->user)->get('/contacts/export?district=Colombo&city=Colombo&date_from=2026-05-11&date_to=2026-05-11');
+
+        $response->assertOk();
+        $csv = $response->streamedContent();
+
+        $this->assertStringContainsString('Included', $csv);
+        $this->assertStringNotContainsString('WrongDistrict', $csv);
+        $this->assertStringNotContainsString('WrongDate', $csv);
+    }
+
     public function test_can_bulk_tag_contacts(): void
     {
         $contacts = Contact::factory()->count(3)->create();
