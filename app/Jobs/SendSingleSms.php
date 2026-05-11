@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Models\CampaignRecipient;
 use App\Models\SmsCampaign;
 use App\Models\SmsMessage;
+use App\Services\Sms\MessagePersonalizer;
 use App\Services\Sms\SmsService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -18,6 +19,7 @@ class SendSingleSms implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $tries = 3;
+
     public int $timeout = 120; // 2 minutes
 
     public function __construct(
@@ -25,21 +27,28 @@ class SendSingleSms implements ShouldQueue
         public CampaignRecipient $recipient,
     ) {}
 
-    public function handle(SmsService $smsService): void
+    public function handle(SmsService $smsService, MessagePersonalizer $messagePersonalizer): void
     {
         // Refresh campaign status
         $this->campaign->refresh();
 
-        if (!$this->campaign->isSending() && !$this->campaign->isQueued()) {
+        if (! $this->campaign->isSending() && ! $this->campaign->isQueued()) {
             Log::info('Campaign no longer active, skipping SMS', [
                 'campaign_id' => $this->campaign->id,
                 'recipient_id' => $this->recipient->id,
                 'status' => $this->campaign->status,
             ]);
+
             return;
         }
 
-        $messageBody = $this->recipient->personalised_message ?? $this->campaign->message_body;
+        $this->recipient->loadMissing('contact');
+
+        $messageBody = $this->recipient->personalised_message;
+        if (! $messageBody && $this->recipient->contact) {
+            $messageBody = $messagePersonalizer->render($this->campaign->message_body, $this->recipient->contact);
+        }
+        $messageBody ??= $this->campaign->message_body;
         $senderId = $this->campaign->sender_id ?? config('sms.source');
 
         // Create SMS message log
@@ -55,6 +64,34 @@ class SendSingleSms implements ShouldQueue
 
         // Update attempt count
         $this->recipient->increment('attempt_count');
+
+        $unresolvedPlaceholders = $messagePersonalizer->unresolvedPlaceholders($messageBody);
+        if (! empty($unresolvedPlaceholders)) {
+            $errorMessage = 'Message contains unresolved placeholders: '.implode(', ', $unresolvedPlaceholders);
+
+            $this->recipient->update([
+                'status' => 'failed',
+                'failed_at' => now(),
+                'error_message' => $errorMessage,
+            ]);
+
+            $smsMessage->update([
+                'status' => 'failed',
+                'error_message' => $errorMessage,
+                'failed_at' => now(),
+            ]);
+
+            $this->campaign->increment('failed_count');
+            $this->campaign->decrement('pending_count');
+
+            Log::warning('SMS send blocked due to unresolved placeholders', [
+                'campaign_id' => $this->campaign->id,
+                'recipient_id' => $this->recipient->id,
+                'placeholders' => $unresolvedPlaceholders,
+            ]);
+
+            return;
+        }
 
         // Send SMS
         $result = $smsService->send($this->recipient->phone_normalised, $messageBody, $senderId);

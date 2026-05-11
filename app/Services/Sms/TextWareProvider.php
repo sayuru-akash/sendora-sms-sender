@@ -6,6 +6,7 @@ use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 class TextWareProvider implements SmsProviderInterface
 {
@@ -52,7 +53,7 @@ class TextWareProvider implements SmsProviderInterface
                     'dr' => '1',
                 ]);
 
-            $body = $response->body();
+            $body = $this->sanitizeProviderBody($response->body());
             $statusCode = $response->status();
 
             // Parse response - TextWare typically returns status in the body
@@ -68,6 +69,8 @@ class TextWareProvider implements SmsProviderInterface
                     $json = $response->json();
                     $rawResponse['json'] = $json;
                     $providerMessageId = $json['message_id'] ?? $json['id'] ?? null;
+                } elseif (preg_match('/Operation success:\s*(\S+)/i', $body, $matches)) {
+                    $providerMessageId = $matches[1];
                 }
 
                 Log::info('SMS sent successfully', [
@@ -91,7 +94,7 @@ class TextWareProvider implements SmsProviderInterface
             ]);
 
             return SmsResult::failure(
-                errorMessage: "Provider returned status {$statusCode}: {$body}",
+                errorMessage: "Provider returned status {$statusCode}: ".$this->summarizeProviderError($body),
                 rawResponse: $rawResponse,
             );
         } catch (ConnectionException $e) {
@@ -119,5 +122,30 @@ class TextWareProvider implements SmsProviderInterface
 
             return SmsResult::failure('Unexpected error: '.$e->getMessage());
         }
+    }
+
+    private function sanitizeProviderBody(string $body): string
+    {
+        $sanitized = $body;
+
+        foreach ([config('sms.username'), config('sms.password')] as $sensitiveValue) {
+            if (is_string($sensitiveValue) && $sensitiveValue !== '') {
+                $sanitized = str_replace($sensitiveValue, '[redacted]', $sanitized);
+                $sanitized = str_replace(rawurlencode($sensitiveValue), '[redacted]', $sanitized);
+                $sanitized = str_replace(urlencode($sensitiveValue), '[redacted]', $sanitized);
+            }
+        }
+
+        $sanitized = preg_replace('/([?&](?:username|password)=)[^&"\'<>\s]+/i', '$1[redacted]', $sanitized) ?? $sanitized;
+
+        return Str::limit($sanitized, 1000);
+    }
+
+    private function summarizeProviderError(string $body): string
+    {
+        $summary = trim(html_entity_decode(strip_tags($body)));
+        $summary = preg_replace('/\s+/', ' ', $summary) ?? $summary;
+
+        return $summary === '' ? 'No response body.' : Str::limit($summary, 240);
     }
 }

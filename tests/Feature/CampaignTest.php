@@ -10,7 +10,10 @@ use App\Models\Contact;
 use App\Models\ListModel;
 use App\Models\SmsCampaign;
 use App\Models\User;
+use App\Services\Sms\MessagePersonalizer;
+use App\Services\Sms\SmsService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
@@ -62,7 +65,7 @@ class CampaignTest extends TestCase
     {
         $response = $this->actingAs($this->staff)->postJson('/campaigns', [
             'name' => 'Registered Sender Campaign',
-            'sender_id' => 'SITC Campus',
+            'sender_id' => 'SITC CAMPUS',
             'message_body' => 'Hello from Sendora!',
             'target_type' => 'all_contacts',
         ]);
@@ -70,7 +73,7 @@ class CampaignTest extends TestCase
         $response->assertCreated();
         $this->assertDatabaseHas('sms_campaigns', [
             'name' => 'Registered Sender Campaign',
-            'sender_id' => 'SITC Campus',
+            'sender_id' => 'SITC CAMPUS',
         ]);
     }
 
@@ -233,6 +236,109 @@ class CampaignTest extends TestCase
 
         $receivable = Contact::canReceiveSms()->count();
         $this->assertEquals(3, $receivable);
+    }
+
+    public function test_prepare_campaign_recipients_personalises_contact_placeholders(): void
+    {
+        $contact = Contact::factory()->active()->create([
+            'first_name' => 'Nimal',
+            'last_name' => 'Perera',
+            'full_name' => 'Nimal Perera',
+            'company' => 'SITC',
+            'city' => 'Colombo',
+            'district' => 'Colombo',
+        ]);
+        $campaign = SmsCampaign::factory()->create([
+            'message_body' => 'Hi {first_name} {last_name}, {company} in {city}/{district}',
+            'target_type' => 'manual_selection',
+            'target_filters' => ['contact_ids' => [$contact->id]],
+        ]);
+
+        (new PrepareCampaignRecipients($campaign))->handle(app(MessagePersonalizer::class));
+
+        $recipient = CampaignRecipient::where('campaign_id', $campaign->id)->firstOrFail();
+
+        $this->assertSame('Hi Nimal Perera, SITC in Colombo/Colombo', $recipient->personalised_message);
+    }
+
+    public function test_send_single_sms_personalises_legacy_recipient_without_prepared_message(): void
+    {
+        config()->set('sms.username', 'testuser');
+        config()->set('sms.password', 'testpass');
+        config()->set('sms.source', 'SITC CAMPUS');
+        config()->set('sms.api_url', 'https://msg.text-ware.com/send_sms.php');
+
+        Http::fake([
+            'msg.text-ware.com/*' => Http::response('Operation success: msg123', 200),
+        ]);
+
+        $contact = Contact::factory()->active()->create([
+            'first_name' => 'Nimal',
+            'city' => 'Colombo',
+            'phone_normalised' => '94771111111',
+        ]);
+        $campaign = SmsCampaign::factory()->sending()->create([
+            'message_body' => 'Hi {first_name} from {city}',
+            'sender_id' => 'SITC CAMPUS',
+            'pending_count' => 1,
+        ]);
+        $recipient = CampaignRecipient::create([
+            'campaign_id' => $campaign->id,
+            'contact_id' => $contact->id,
+            'phone_normalised' => $contact->phone_normalised,
+            'status' => 'pending',
+        ]);
+
+        (new SendSingleSms($campaign, $recipient))->handle(app(SmsService::class), app(MessagePersonalizer::class));
+
+        $recipient->refresh();
+
+        $this->assertSame('sent', $recipient->status);
+        $this->assertSame('msg123', $recipient->provider_message_id);
+        $this->assertDatabaseHas('sms_messages', [
+            'campaign_recipient_id' => $recipient->id,
+            'message_body' => 'Hi Nimal from Colombo',
+            'status' => 'sent',
+        ]);
+
+        Http::assertSent(fn ($request) => $request->data()['msg'] === 'Hi Nimal from Colombo');
+    }
+
+    public function test_send_single_sms_blocks_unresolved_placeholders_before_provider_call(): void
+    {
+        config()->set('sms.username', 'testuser');
+        config()->set('sms.password', 'testpass');
+        config()->set('sms.source', 'SITC CAMPUS');
+        config()->set('sms.api_url', 'https://msg.text-ware.com/send_sms.php');
+
+        Http::fake();
+
+        $contact = Contact::factory()->active()->create();
+        $campaign = SmsCampaign::factory()->sending()->create([
+            'message_body' => 'Payment due: {amount}',
+            'sender_id' => 'SITC CAMPUS',
+            'pending_count' => 1,
+        ]);
+        $recipient = CampaignRecipient::create([
+            'campaign_id' => $campaign->id,
+            'contact_id' => $contact->id,
+            'phone_normalised' => $contact->phone_normalised,
+            'status' => 'pending',
+        ]);
+
+        (new SendSingleSms($campaign, $recipient))->handle(app(SmsService::class), app(MessagePersonalizer::class));
+
+        $recipient->refresh();
+
+        $this->assertSame('failed', $recipient->status);
+        $this->assertSame('Message contains unresolved placeholders: amount', $recipient->error_message);
+        $this->assertDatabaseHas('sms_messages', [
+            'campaign_recipient_id' => $recipient->id,
+            'status' => 'failed',
+            'error_message' => 'Message contains unresolved placeholders: amount',
+        ]);
+
+        Http::assertNothingSent();
     }
 
     public function test_campaign_prevents_duplicate_sends(): void

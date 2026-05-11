@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { onBeforeUnmount, onMounted } from 'vue';
 import AppLayout from '@/Components/layout/AppLayout.vue';
 import PageHeader from '@/Components/common/PageHeader.vue';
 import StatusBadge from '@/Components/common/StatusBadge.vue';
@@ -22,6 +23,7 @@ const props = defineProps<{
 }>();
 
 const { confirm } = useConfirm();
+let refreshTimer: number | undefined;
 
 async function deleteCampaign(campaign: Campaign) {
   const confirmed = await confirm({
@@ -48,6 +50,22 @@ function cancelCampaign(campaign: Campaign) {
 function duplicateCampaign(campaign: Campaign) {
   router.post(route('campaigns.duplicate', campaign.id));
 }
+
+function refreshCampaigns() {
+  if (document.visibilityState !== 'visible') return;
+
+  router.reload({
+    only: ['campaigns'],
+  });
+}
+
+onMounted(() => {
+  refreshTimer = window.setInterval(refreshCampaigns, 5000);
+});
+
+onBeforeUnmount(() => {
+  if (refreshTimer) window.clearInterval(refreshTimer);
+});
 </script>
 
 <template>

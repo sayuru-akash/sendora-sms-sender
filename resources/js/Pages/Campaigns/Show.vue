@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import AppLayout from '@/Components/layout/AppLayout.vue';
 import PageHeader from '@/Components/common/PageHeader.vue';
 import StatusBadge from '@/Components/common/StatusBadge.vue';
@@ -27,6 +27,7 @@ const props = defineProps<{
 const { confirm } = useConfirm();
 const isResendingFailed = ref(false);
 const retryingRecipientId = ref<number | null>(null);
+let refreshTimer: number | undefined;
 
 const canResendFailed = computed(() => ['completed', 'failed'].includes(props.campaign.status) && props.campaign.failed_count > 0);
 
@@ -56,6 +57,7 @@ async function resendFailedCampaign() {
   isResendingFailed.value = true;
   router.post(route('campaigns.resend-failed', props.campaign.id), {}, {
     preserveScroll: true,
+    only: ['campaign', 'recipients'],
     onFinish: () => {
       isResendingFailed.value = false;
     },
@@ -73,6 +75,7 @@ async function resendRecipient(recipient: CampaignRecipient) {
   retryingRecipientId.value = recipient.id;
   router.post(route('campaigns.recipients.resend', [props.campaign.id, recipient.id]), {}, {
     preserveScroll: true,
+    only: ['campaign', 'recipients'],
     onFinish: () => {
       retryingRecipientId.value = null;
     },
@@ -88,12 +91,28 @@ async function cancelCampaign() {
   if (confirmed) router.post(route('campaigns.cancel', props.campaign.id));
 }
 
-const stats = [
+const stats = computed(() => [
   { label: 'Total Recipients', value: props.campaign.total_recipients, icon: Send, color: 'text-primary', bg: 'bg-primary-light' },
   { label: 'Sent', value: props.campaign.sent_count, icon: CheckCircle, color: 'text-success', bg: 'bg-success-light' },
   { label: 'Failed', value: props.campaign.failed_count, icon: XCircle, color: 'text-danger', bg: 'bg-danger-light' },
   { label: 'Pending', value: props.campaign.pending_count, icon: Clock, color: 'text-warning', bg: 'bg-warning-light' },
-];
+]);
+
+function refreshCampaignState() {
+  if (document.visibilityState !== 'visible') return;
+
+  router.reload({
+    only: ['campaign', 'recipients'],
+  });
+}
+
+onMounted(() => {
+  refreshTimer = window.setInterval(refreshCampaignState, 3000);
+});
+
+onBeforeUnmount(() => {
+  if (refreshTimer) window.clearInterval(refreshTimer);
+});
 </script>
 
 <template>

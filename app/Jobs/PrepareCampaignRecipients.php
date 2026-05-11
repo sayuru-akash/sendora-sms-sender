@@ -6,6 +6,7 @@ use App\Models\CampaignRecipient;
 use App\Models\Contact;
 use App\Models\SavedSegment;
 use App\Models\SmsCampaign;
+use App\Services\Sms\MessagePersonalizer;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Database\Eloquent\Builder;
@@ -25,7 +26,7 @@ class PrepareCampaignRecipients implements ShouldQueue
         public SmsCampaign $campaign,
     ) {}
 
-    public function handle(): void
+    public function handle(MessagePersonalizer $messagePersonalizer): void
     {
         $this->campaign->markQueued();
 
@@ -36,6 +37,7 @@ class PrepareCampaignRecipients implements ShouldQueue
                 'campaign_id' => $this->campaign->id,
                 'contact_id' => $contact->id,
                 'phone_normalised' => $contact->phone_normalised,
+                'personalised_message' => $messagePersonalizer->render($this->campaign->message_body, $contact),
                 'status' => 'pending',
                 'created_at' => now(),
                 'updated_at' => now(),
@@ -68,7 +70,22 @@ class PrepareCampaignRecipients implements ShouldQueue
     protected function resolveContacts(): Builder
     {
         $query = Contact::query()
-            ->select(['id', 'phone_normalised'])
+            ->select([
+                'id',
+                'first_name',
+                'last_name',
+                'full_name',
+                'phone',
+                'phone_normalised',
+                'email',
+                'company',
+                'job_title',
+                'country',
+                'district',
+                'city',
+                'gender',
+                'source',
+            ])
             ->canReceiveSms();
 
         switch ($this->campaign->target_type) {
