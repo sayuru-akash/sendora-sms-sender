@@ -31,6 +31,14 @@ function pauseCampaign() {
 function resumeCampaign() {
   router.post(route('campaigns.resume', props.campaign.id));
 }
+async function sendCampaign() {
+  const confirmed = await confirm({
+    title: 'Send Campaign',
+    message: 'Start sending this campaign now?',
+    confirmLabel: 'Send Campaign',
+  });
+  if (confirmed) router.post(route('campaigns.send', props.campaign.id), { confirmed: true });
+}
 async function cancelCampaign() {
   const confirmed = await confirm({
     title: 'Cancel Campaign',
@@ -65,6 +73,10 @@ const stats = [
             Report
           </Button>
         </Link>
+        <Button v-if="campaign.status === 'draft'" @click="sendCampaign">
+          <Send class="h-4 w-4" />
+          Send
+        </Button>
         <Button v-if="campaign.status === 'sending'" variant="outline" @click="pauseCampaign">
           <Pause class="h-4 w-4" />
           Pause

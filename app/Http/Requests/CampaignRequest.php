@@ -32,6 +32,7 @@ class CampaignRequest extends FormRequest
             'notes' => ['nullable', 'string', 'max:2000'],
             'scheduled_at' => ['nullable', 'date', 'after:now'],
             'status' => ['nullable', Rule::in(['draft', 'scheduled'])],
+            'send_now' => ['sometimes', 'boolean'],
         ];
     }
 

@@ -174,6 +174,10 @@ class CampaignController extends Controller
 
     public function store(CampaignRequest $request)
     {
+        if ($request->boolean('send_now')) {
+            abort_unless($request->user()->canSendCampaigns(), 403);
+        }
+
         $campaign = SmsCampaign::create([
             'uuid' => Str::uuid(),
             'name' => $request->name,
@@ -189,6 +193,18 @@ class CampaignController extends Controller
         ]);
 
         $this->activityLogger->logCampaignCreated($campaign);
+
+        if ($request->boolean('send_now')) {
+            $this->dispatchCampaignSend($campaign);
+            $this->activityLogger->logCampaignSent($campaign);
+
+            if ($request->expectsJson()) {
+                return response()->json(['campaign' => $campaign->fresh(), 'message' => 'Campaign is being processed.'], 201);
+            }
+
+            return redirect()->route('campaigns.show', $campaign)
+                ->with('success', 'Campaign sending has started.');
+        }
 
         if ($request->expectsJson()) {
             return response()->json(['campaign' => $campaign], 201);
@@ -299,14 +315,7 @@ class CampaignController extends Controller
             abort(422, 'Campaign cannot be sent in its current status: '.$campaign->status);
         }
 
-        $campaign->markQueued();
-
-        // Dispatch recipient preparation, then sending chain
-        PrepareCampaignRecipients::dispatch($campaign)
-            ->chain([
-                new SendCampaignMessages($campaign),
-                new FinalizeCampaign($campaign),
-            ]);
+        $this->dispatchCampaignSend($campaign);
 
         $this->activityLogger->logCampaignSent($campaign);
 
@@ -316,6 +325,17 @@ class CampaignController extends Controller
 
         return redirect()->route('campaigns.show', $campaign)
             ->with('success', 'Campaign sending has started.');
+    }
+
+    protected function dispatchCampaignSend(SmsCampaign $campaign): void
+    {
+        $campaign->markQueued();
+
+        PrepareCampaignRecipients::dispatch($campaign)
+            ->chain([
+                new SendCampaignMessages($campaign),
+                new FinalizeCampaign($campaign),
+            ]);
     }
 
     /**

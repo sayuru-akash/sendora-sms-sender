@@ -131,6 +131,7 @@ function submit() {
     notes: data.notes,
     scheduled_at: data.schedule_enabled ? data.scheduled_at : undefined,
     status: data.schedule_enabled ? 'scheduled' : 'draft',
+    send_now: !data.schedule_enabled,
   })).post(route('campaigns.store'));
 }
 
@@ -148,6 +149,7 @@ function saveDraft() {
     template_id: data.template_id,
     notes: data.notes,
     status: 'draft',
+    send_now: false,
   })).post(route('campaigns.store'));
 }
 

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Jobs\PrepareCampaignRecipients;
 use App\Models\Contact;
 use App\Models\ListModel;
 use App\Models\SmsCampaign;
@@ -52,6 +53,43 @@ class CampaignTest extends TestCase
         $this->assertDatabaseHas('sms_campaigns', [
             'name' => 'Long Payment Reminder',
         ]);
+    }
+
+    public function test_manager_can_create_and_send_campaign_immediately_from_builder(): void
+    {
+        Queue::fake();
+
+        $response = $this->actingAs($this->manager)->postJson('/campaigns', [
+            'name' => 'Immediate Campaign',
+            'message_body' => 'Hello now!',
+            'target_type' => 'all_contacts',
+            'send_now' => true,
+        ]);
+
+        $response->assertCreated();
+
+        $campaign = SmsCampaign::where('name', 'Immediate Campaign')->firstOrFail();
+
+        $this->assertTrue($campaign->isQueued());
+        Queue::assertPushed(PrepareCampaignRecipients::class);
+    }
+
+    public function test_staff_cannot_send_campaign_immediately_from_builder(): void
+    {
+        Queue::fake();
+
+        $response = $this->actingAs($this->staff)->postJson('/campaigns', [
+            'name' => 'Unauthorized Immediate Campaign',
+            'message_body' => 'Hello now!',
+            'target_type' => 'all_contacts',
+            'send_now' => true,
+        ]);
+
+        $response->assertForbidden();
+        $this->assertDatabaseMissing('sms_campaigns', [
+            'name' => 'Unauthorized Immediate Campaign',
+        ]);
+        Queue::assertNothingPushed();
     }
 
     public function test_list_campaign_accepts_flat_list_ids_from_quick_form(): void
