@@ -2,6 +2,8 @@
 
 namespace App\Services\Sms;
 
+use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -24,8 +26,8 @@ class TextWareProvider implements SmsProviderInterface
         if (empty($username) || empty($password)) {
             Log::error('SMS provider credentials not configured', [
                 'provider' => $this->getName(),
-                'has_username' => !empty($username),
-                'has_password' => !empty($password),
+                'has_username' => ! empty($username),
+                'has_password' => ! empty($password),
             ]);
 
             return SmsResult::failure('SMS provider credentials are not configured.');
@@ -41,13 +43,13 @@ class TextWareProvider implements SmsProviderInterface
 
         try {
             $response = Http::timeout($timeout)
-                ->asForm()
-                ->post($apiUrl, [
+                ->get($apiUrl, [
                     'username' => $username,
                     'password' => $password,
-                    'source' => $source ?? '',
-                    'destination' => $phone,
-                    'message' => $message,
+                    'src' => $source ?? '',
+                    'dst' => $phone,
+                    'msg' => $message,
+                    'dr' => '1',
                 ]);
 
             $body = $response->body();
@@ -92,22 +94,22 @@ class TextWareProvider implements SmsProviderInterface
                 errorMessage: "Provider returned status {$statusCode}: {$body}",
                 rawResponse: $rawResponse,
             );
-        } catch (\Illuminate\Http\Client\ConnectionException $e) {
+        } catch (ConnectionException $e) {
             Log::error('SMS provider connection failed', [
                 'provider' => $this->getName(),
                 'phone' => $phone,
                 'error' => $e->getMessage(),
             ]);
 
-            return SmsResult::failure('Network error: Unable to connect to SMS provider. ' . $e->getMessage());
-        } catch (\Illuminate\Http\Client\RequestException $e) {
+            return SmsResult::failure('Network error: Unable to connect to SMS provider. '.$e->getMessage());
+        } catch (RequestException $e) {
             Log::error('SMS provider request failed', [
                 'provider' => $this->getName(),
                 'phone' => $phone,
                 'error' => $e->getMessage(),
             ]);
 
-            return SmsResult::failure('Request error: ' . $e->getMessage());
+            return SmsResult::failure('Request error: '.$e->getMessage());
         } catch (\Exception $e) {
             Log::error('SMS provider unexpected error', [
                 'provider' => $this->getName(),
@@ -115,7 +117,7 @@ class TextWareProvider implements SmsProviderInterface
                 'error' => $e->getMessage(),
             ]);
 
-            return SmsResult::failure('Unexpected error: ' . $e->getMessage());
+            return SmsResult::failure('Unexpected error: '.$e->getMessage());
         }
     }
 }

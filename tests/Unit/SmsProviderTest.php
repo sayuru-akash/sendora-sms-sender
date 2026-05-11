@@ -4,6 +4,7 @@ namespace Tests\Unit;
 
 use App\Services\Sms\SmsResult;
 use App\Services\Sms\TextWareProvider;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
@@ -20,7 +21,7 @@ class SmsProviderTest extends TestCase
             'msg.text-ware.com/*' => Http::response('OK', 200),
         ]);
 
-        $provider = new TextWareProvider();
+        $provider = new TextWareProvider;
         $result = $provider->send('94771234567', 'Test message');
 
         $this->assertInstanceOf(SmsResult::class, $result);
@@ -28,10 +29,12 @@ class SmsProviderTest extends TestCase
         $this->assertTrue($result->sent);
 
         Http::assertSent(function ($request) {
-            return $request->url() === 'https://msg.text-ware.com/send_sms.php'
+            return str_starts_with($request->url(), 'https://msg.text-ware.com/send_sms.php?')
                 && $request->data()['username'] === 'testuser'
-                && $request->data()['destination'] === '94771234567'
-                && $request->data()['message'] === 'Test message';
+                && $request->data()['src'] === 'SENDER'
+                && $request->data()['dst'] === '94771234567'
+                && $request->data()['msg'] === 'Test message'
+                && $request->data()['dr'] === '1';
         });
     }
 
@@ -46,7 +49,7 @@ class SmsProviderTest extends TestCase
             'msg.text-ware.com/*' => Http::response('Invalid credentials', 401),
         ]);
 
-        $provider = new TextWareProvider();
+        $provider = new TextWareProvider;
         $result = $provider->send('94771234567', 'Test message');
 
         $this->assertFalse($result->success);
@@ -62,11 +65,11 @@ class SmsProviderTest extends TestCase
 
         Http::fake([
             'msg.text-ware.com/*' => function () {
-                throw new \Illuminate\Http\Client\ConnectionException('Connection timed out');
+                throw new ConnectionException('Connection timed out');
             },
         ]);
 
-        $provider = new TextWareProvider();
+        $provider = new TextWareProvider;
         $result = $provider->send('94771234567', 'Test message');
 
         $this->assertFalse($result->success);
@@ -80,7 +83,7 @@ class SmsProviderTest extends TestCase
         config()->set('sms.password', null);
         config()->set('sms.api_url', 'https://msg.text-ware.com/send_sms.php');
 
-        $provider = new TextWareProvider();
+        $provider = new TextWareProvider;
         $result = $provider->send('94771234567', 'Test message');
 
         $this->assertFalse($result->success);
@@ -90,7 +93,7 @@ class SmsProviderTest extends TestCase
 
     public function test_provider_get_name(): void
     {
-        $provider = new TextWareProvider();
+        $provider = new TextWareProvider;
         $this->assertEquals('textware', $provider->getName());
     }
 
