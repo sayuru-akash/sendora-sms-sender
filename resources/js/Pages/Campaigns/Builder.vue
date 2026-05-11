@@ -14,8 +14,9 @@ import Textarea from '@/Components/ui/Textarea.vue';
 import Badge from '@/Components/ui/Badge.vue';
 import CharacterCounter from '@/Components/common/CharacterCounter.vue';
 import SmsPreview from '@/Components/common/SmsPreview.vue';
+import ManualContactSelector from '@/Components/campaigns/ManualContactSelector.vue';
 import { Head, useForm, router } from '@inertiajs/vue3';
-import { ChevronLeft, ChevronRight, Send, Save, Calendar } from 'lucide-vue-next';
+import { ChevronLeft, ChevronRight, Send, Save } from 'lucide-vue-next';
 import type { Tag, ListModel } from '@/types';
 import type { Template } from '@/types/template';
 import { TEMPLATE_VARIABLES } from '@/types/template';
@@ -31,6 +32,8 @@ const props = defineProps<{
 
 const currentStep = ref(1);
 const totalSteps = 5;
+const estimatedRecipients = ref(props.estimated_count);
+const isEstimating = ref(false);
 
 const form = useForm({
   name: '',
@@ -58,9 +61,35 @@ const targetOptions = [
   { label: 'All Contacts', value: 'all_contacts' },
   { label: 'By Lists', value: 'list' },
   { label: 'By Tags', value: 'tag' },
+  { label: 'Manual Selection', value: 'manual_selection' },
 ];
 
+const audienceError = computed(() => {
+  if (form.target_type === 'list' && form.list_ids.length === 0) {
+    return 'Select at least one list.';
+  }
+
+  if (form.target_type === 'tag' && form.tag_ids.length === 0) {
+    return 'Select at least one tag.';
+  }
+
+  if (form.target_type === 'manual_selection' && form.contact_ids.length === 0) {
+    return 'Select at least one contact.';
+  }
+
+  return '';
+});
+
+const canContinue = computed(() => currentStep.value !== 2 || !audienceError.value);
+
+watch(
+  () => [form.target_type, form.list_ids, form.tag_ids, form.contact_ids],
+  () => fetchAudienceEstimate(),
+  { deep: true },
+);
+
 function nextStep() {
+  if (!canContinue.value) return;
   if (currentStep.value < totalSteps) currentStep.value++;
 }
 
@@ -96,7 +125,7 @@ function submit() {
     target_filters: {
       list_ids: data.target_type === 'list' ? data.list_ids : undefined,
       tag_ids: data.target_type === 'tag' ? data.tag_ids : undefined,
-      contact_ids: data.contact_ids.length ? data.contact_ids : undefined,
+      contact_ids: data.target_type === 'manual_selection' ? data.contact_ids : undefined,
     },
     template_id: data.template_id,
     notes: data.notes,
@@ -114,12 +143,33 @@ function saveDraft() {
     target_filters: {
       list_ids: data.target_type === 'list' ? data.list_ids : undefined,
       tag_ids: data.target_type === 'tag' ? data.tag_ids : undefined,
-      contact_ids: data.contact_ids.length ? data.contact_ids : undefined,
+      contact_ids: data.target_type === 'manual_selection' ? data.contact_ids : undefined,
     },
     template_id: data.template_id,
     notes: data.notes,
     status: 'draft',
   })).post(route('campaigns.store'));
+}
+
+async function fetchAudienceEstimate() {
+  isEstimating.value = true;
+
+  try {
+    const response = await window.axios.post(route('campaigns.audience.estimate'), {
+      target_type: form.target_type,
+      list_ids: form.list_ids,
+      tag_ids: form.tag_ids,
+      contact_ids: form.contact_ids,
+    });
+
+    estimatedRecipients.value = response.data.count;
+  } finally {
+    isEstimating.value = false;
+  }
+}
+
+function validationError(field: string): string | undefined {
+  return (form.errors as Record<string, string | undefined>)[field];
 }
 </script>
 
@@ -237,9 +287,22 @@ function saveDraft() {
           </div>
         </div>
 
+        <div v-if="form.target_type === 'manual_selection'" class="space-y-1.5">
+          <Label>Select Contacts</Label>
+          <ManualContactSelector
+            v-model="form.contact_ids"
+            :error="validationError('target_filters.contact_ids') || audienceError"
+          />
+        </div>
+
+        <p v-if="audienceError && form.target_type !== 'manual_selection'" class="text-xs text-danger">
+          {{ audienceError }}
+        </p>
+
         <div class="rounded-lg bg-gray-50 p-3">
           <p class="text-sm text-muted">
-            Estimated recipients: <span class="font-semibold text-foreground">{{ formatNumber(estimated_count) }}</span>
+            Estimated recipients:
+            <span class="font-semibold text-foreground">{{ isEstimating ? '…' : formatNumber(estimatedRecipients) }}</span>
           </p>
         </div>
       </CardContent>
@@ -321,7 +384,7 @@ function saveDraft() {
         <div class="rounded-lg bg-gray-50 p-4 mb-4">
           <p class="text-sm text-muted">
             Your campaign will be sent to approximately
-            <span class="font-semibold text-foreground">{{ formatNumber(estimated_count) }}</span>
+            <span class="font-semibold text-foreground">{{ formatNumber(estimatedRecipients) }}</span>
             contacts.
           </p>
         </div>
@@ -352,7 +415,7 @@ function saveDraft() {
           </div>
           <div class="flex justify-between">
             <dt class="text-muted">Estimated Recipients</dt>
-            <dd class="font-medium text-foreground">{{ formatNumber(estimated_count) }}</dd>
+            <dd class="font-medium text-foreground">{{ formatNumber(estimatedRecipients) }}</dd>
           </div>
         </dl>
 
@@ -388,7 +451,7 @@ function saveDraft() {
           <Save class="h-4 w-4" />
           Save Draft
         </Button>
-        <Button v-if="currentStep < totalSteps" @click="nextStep">
+        <Button v-if="currentStep < totalSteps" :disabled="!canContinue" @click="nextStep">
           Next
           <ChevronRight class="h-4 w-4" />
         </Button>

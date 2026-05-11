@@ -53,6 +53,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // Campaigns
     Route::get('/campaigns/builder', [CampaignController::class, 'builder'])->name('campaigns.builder');
+    Route::get('/campaigns/audience/contacts', [CampaignController::class, 'audienceContacts'])->name('campaigns.audience.contacts');
+    Route::post('/campaigns/audience/estimate', [CampaignController::class, 'audienceEstimate'])->name('campaigns.audience.estimate');
     Route::post('/campaigns/{campaign}/send', [CampaignController::class, 'send'])->name('campaigns.send');
     Route::post('/campaigns/{campaign}/pause', [CampaignController::class, 'pause'])->name('campaigns.pause');
     Route::post('/campaigns/{campaign}/resume', [CampaignController::class, 'resume'])->name('campaigns.resume');

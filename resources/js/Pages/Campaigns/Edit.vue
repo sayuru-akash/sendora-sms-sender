@@ -1,7 +1,9 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import AppLayout from '@/Components/layout/AppLayout.vue';
 import PageHeader from '@/Components/common/PageHeader.vue';
 import CharacterCounter from '@/Components/common/CharacterCounter.vue';
+import ManualContactSelector from '@/Components/campaigns/ManualContactSelector.vue';
 import Card from '@/Components/ui/Card.vue';
 import CardContent from '@/Components/ui/CardContent.vue';
 import CardHeader from '@/Components/ui/CardHeader.vue';
@@ -34,6 +36,7 @@ const form = useForm({
   target_type: props.campaign.target_type,
   list_ids: props.campaign.target_config?.list_ids ?? ([] as number[]),
   tag_ids: props.campaign.target_config?.tag_ids ?? ([] as number[]),
+  contact_ids: props.campaign.target_config?.contact_ids ?? ([] as number[]),
   scheduled_at: props.campaign.scheduled_at ?? '',
   notes: props.campaign.notes ?? '',
 });
@@ -47,7 +50,27 @@ const targetOptions = [
   { label: 'Advanced Filter', value: 'advanced_filter' },
 ];
 
+const audienceError = computed(() => {
+  if (form.target_type === 'list' && form.list_ids.length === 0) {
+    return 'Select at least one list.';
+  }
+
+  if (form.target_type === 'tag' && form.tag_ids.length === 0) {
+    return 'Select at least one tag.';
+  }
+
+  if (form.target_type === 'manual_selection' && form.contact_ids.length === 0) {
+    return 'Select at least one contact.';
+  }
+
+  return '';
+});
+
 function submit() {
+  if (audienceError.value) {
+    return;
+  }
+
   form.transform((data) => ({
     name: data.name,
     sender_id: data.sender_id,
@@ -56,11 +79,16 @@ function submit() {
     target_filters: {
       list_ids: data.target_type === 'list' ? data.list_ids : undefined,
       tag_ids: data.target_type === 'tag' ? data.tag_ids : undefined,
+      contact_ids: data.target_type === 'manual_selection' ? data.contact_ids : undefined,
     },
     notes: data.notes,
     scheduled_at: data.scheduled_at || undefined,
     status: data.scheduled_at ? 'scheduled' : 'draft',
   })).put(route('campaigns.update', props.campaign.id));
+}
+
+function validationError(field: string): string | undefined {
+  return (form.errors as Record<string, string | undefined>)[field];
 }
 
 async function handleDelete() {
@@ -91,7 +119,7 @@ async function handleDelete() {
           <Trash2 class="h-4 w-4 text-danger" />
         </Button>
         <Button variant="outline" @click="$inertia.visit(route('campaigns.show', campaign.id))">Cancel</Button>
-        <Button :loading="form.processing" @click="submit">
+        <Button :disabled="Boolean(audienceError)" :loading="form.processing" @click="submit">
           <Save class="h-4 w-4" />
           Update Campaign
         </Button>
@@ -146,7 +174,10 @@ async function handleDelete() {
                   <span class="text-sm text-foreground">{{ list.name }}</span>
                 </label>
               </div>
-              <p v-if="form.errors.list_ids" class="text-xs text-danger">{{ form.errors.list_ids }}</p>
+              <p v-if="form.errors.list_ids || validationError('target_filters.list_ids')" class="text-xs text-danger">
+                {{ form.errors.list_ids || validationError('target_filters.list_ids') }}
+              </p>
+              <p v-if="audienceError && form.target_type === 'list'" class="text-xs text-danger">{{ audienceError }}</p>
             </div>
 
             <div v-if="form.target_type === 'tag'" class="space-y-1.5">
@@ -157,7 +188,10 @@ async function handleDelete() {
                   <span class="text-sm text-foreground">{{ tag.name }}</span>
                 </label>
               </div>
-              <p v-if="form.errors.tag_ids" class="text-xs text-danger">{{ form.errors.tag_ids }}</p>
+              <p v-if="form.errors.tag_ids || validationError('target_filters.tag_ids')" class="text-xs text-danger">
+                {{ form.errors.tag_ids || validationError('target_filters.tag_ids') }}
+              </p>
+              <p v-if="audienceError && form.target_type === 'tag'" class="text-xs text-danger">{{ audienceError }}</p>
             </div>
 
             <div v-if="form.target_type === 'saved_segment'" class="rounded-lg bg-gray-50 p-4">
@@ -166,10 +200,12 @@ async function handleDelete() {
               </p>
             </div>
 
-            <div v-if="form.target_type === 'manual_selection'" class="rounded-lg bg-gray-50 p-4">
-              <p class="text-sm text-muted">
-                Manual selection is available in the multi-step campaign builder.
-              </p>
+            <div v-if="form.target_type === 'manual_selection'" class="space-y-1.5">
+              <Label>Select Contacts</Label>
+              <ManualContactSelector
+                v-model="form.contact_ids"
+                :error="validationError('target_filters.contact_ids') || audienceError"
+              />
             </div>
 
             <div v-if="form.target_type === 'advanced_filter'" class="rounded-lg bg-gray-50 p-4">
@@ -243,6 +279,10 @@ async function handleDelete() {
               <div v-if="form.target_type === 'tag' && form.tag_ids.length">
                 <dt class="text-muted">Tags</dt>
                 <dd class="font-medium text-foreground mt-0.5">{{ form.tag_ids.length }} selected</dd>
+              </div>
+              <div v-if="form.target_type === 'manual_selection' && form.contact_ids.length">
+                <dt class="text-muted">Contacts</dt>
+                <dd class="font-medium text-foreground mt-0.5">{{ form.contact_ids.length }} selected</dd>
               </div>
               <div v-if="form.scheduled_at">
                 <dt class="text-muted">Scheduled</dt>

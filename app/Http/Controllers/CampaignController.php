@@ -16,9 +16,11 @@ use App\Models\SmsMessage;
 use App\Models\SmsTemplate;
 use App\Models\Tag;
 use App\Services\ActivityLogger;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -62,6 +64,102 @@ class CampaignController extends Controller
             'estimated_count' => $estimatedCount,
             'default_sender_id' => config('sms.source', ''),
         ]);
+    }
+
+    public function audienceContacts(Request $request): JsonResponse
+    {
+        abort_unless($request->user()?->canCreateCampaigns(), 403);
+
+        $validated = $request->validate([
+            'search' => ['nullable', 'string', 'max:100'],
+            'ids' => ['nullable', 'array', 'max:500'],
+            'ids.*' => ['integer', 'exists:contacts,id'],
+        ]);
+
+        $ids = collect($validated['ids'] ?? [])
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values();
+        $search = trim((string) ($validated['search'] ?? ''));
+
+        $baseQuery = Contact::query()
+            ->select(['id', 'full_name', 'first_name', 'last_name', 'email', 'phone_normalised', 'status'])
+            ->canReceiveSms();
+
+        $selectedContacts = $ids->isEmpty()
+            ? collect()
+            : (clone $baseQuery)->whereIn('id', $ids)->get();
+
+        $searchContacts = (clone $baseQuery)
+            ->when($search !== '', fn (Builder $query) => $query->search($search))
+            ->orderBy('full_name')
+            ->limit(30)
+            ->get();
+
+        $contacts = $selectedContacts
+            ->concat($searchContacts)
+            ->unique('id')
+            ->values();
+
+        return response()->json([
+            'contacts' => $contacts->map(fn (Contact $contact) => $this->formatAudienceContact($contact)),
+        ]);
+    }
+
+    public function audienceEstimate(Request $request): JsonResponse
+    {
+        abort_unless($request->user()?->canCreateCampaigns(), 403);
+
+        $validated = Validator::make($request->all(), [
+            'target_type' => ['required', 'string', 'in:all_contacts,list,tag,manual_selection'],
+            'list_ids' => ['nullable', 'array'],
+            'list_ids.*' => ['integer', 'exists:lists,id'],
+            'tag_ids' => ['nullable', 'array'],
+            'tag_ids.*' => ['integer', 'exists:tags,id'],
+            'contact_ids' => ['nullable', 'array'],
+            'contact_ids.*' => ['integer', 'exists:contacts,id'],
+        ])->validate();
+
+        return response()->json([
+            'count' => $this->audienceQuery(
+                $validated['target_type'],
+                $validated['list_ids'] ?? [],
+                $validated['tag_ids'] ?? [],
+                $validated['contact_ids'] ?? [],
+            )->count(),
+        ]);
+    }
+
+    protected function audienceQuery(string $targetType, array $listIds = [], array $tagIds = [], array $contactIds = []): Builder
+    {
+        $query = Contact::query()->canReceiveSms()->distinct('contacts.id');
+
+        return match ($targetType) {
+            'list' => empty($listIds)
+                ? $query->whereRaw('1 = 0')
+                : $query->whereHas('lists', fn ($listQuery) => $listQuery->whereIn('lists.id', $listIds)),
+            'tag' => empty($tagIds)
+                ? $query->whereRaw('1 = 0')
+                : $query->whereHas('tags', fn ($tagQuery) => $tagQuery->whereIn('tags.id', $tagIds)),
+            'manual_selection' => empty($contactIds)
+                ? $query->whereRaw('1 = 0')
+                : $query->whereIn('contacts.id', $contactIds),
+            default => $query,
+        };
+    }
+
+    /**
+     * @return array{id: int, name: string, email: string|null, phone: string|null, status: string}
+     */
+    protected function formatAudienceContact(Contact $contact): array
+    {
+        return [
+            'id' => $contact->id,
+            'name' => $contact->display_name,
+            'email' => $contact->email,
+            'phone' => $contact->phone_normalised,
+            'status' => $contact->status,
+        ];
     }
 
     public function create(): Response

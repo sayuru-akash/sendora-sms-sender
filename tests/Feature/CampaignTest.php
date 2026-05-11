@@ -84,6 +84,72 @@ class CampaignTest extends TestCase
         $response->assertJsonValidationErrors('target_filters.list_ids');
     }
 
+    public function test_manual_campaign_accepts_selected_contact_ids(): void
+    {
+        $contact = Contact::factory()->active()->create();
+
+        $response = $this->actingAs($this->staff)->postJson('/campaigns', [
+            'name' => 'Manual Campaign',
+            'message_body' => 'Hello selected contact!',
+            'target_type' => 'manual_selection',
+            'contact_ids' => [$contact->id],
+        ]);
+
+        $response->assertCreated();
+
+        $campaign = SmsCampaign::where('name', 'Manual Campaign')->firstOrFail();
+
+        $this->assertSame(['list_ids' => [], 'tag_ids' => [], 'contact_ids' => [$contact->id]], $campaign->target_filters);
+    }
+
+    public function test_manual_campaign_requires_at_least_one_selected_contact(): void
+    {
+        $response = $this->actingAs($this->staff)->postJson('/campaigns', [
+            'name' => 'Empty Manual Campaign',
+            'message_body' => 'Hello nobody!',
+            'target_type' => 'manual_selection',
+            'contact_ids' => [],
+        ]);
+
+        $response->assertJsonValidationErrors('target_filters.contact_ids');
+    }
+
+    public function test_audience_contact_search_only_returns_receivable_contacts(): void
+    {
+        $receivable = Contact::factory()->active()->create([
+            'full_name' => 'Manual Audience Student',
+            'email' => 'manual-audience@example.com',
+        ]);
+        $blocked = Contact::factory()->blocked()->create([
+            'full_name' => 'Manual Audience Blocked',
+            'email' => 'manual-audience-blocked@example.com',
+        ]);
+
+        $response = $this->actingAs($this->staff)->getJson('/campaigns/audience/contacts?search=Manual%20Audience');
+
+        $response->assertOk()
+            ->assertJsonPath('contacts.0.id', $receivable->id);
+
+        $ids = collect($response->json('contacts'))->pluck('id');
+
+        $this->assertTrue($ids->contains($receivable->id));
+        $this->assertFalse($ids->contains($blocked->id));
+    }
+
+    public function test_manual_audience_estimate_counts_receivable_contacts_only(): void
+    {
+        $receivable = Contact::factory()->active()->create();
+        $blocked = Contact::factory()->blocked()->create();
+
+        $response = $this->actingAs($this->staff)->postJson('/campaigns/audience/estimate', [
+            'target_type' => 'manual_selection',
+            'contact_ids' => [$receivable->id, $blocked->id],
+        ]);
+
+        $response->assertOk()
+            ->assertJsonPath('count', 1);
+    }
+
     public function test_campaign_excludes_unsubscribed(): void
     {
         Contact::factory()->active()->count(3)->create();
