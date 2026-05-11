@@ -37,10 +37,27 @@ class CampaignController extends Controller
 
     public function index(Request $request): Response
     {
+        $baseQuery = SmsCampaign::query()
+            ->when($request->search, fn ($q, $search) => $q->search($search))
+            ->when($request->status, fn ($q, $status) => $q->byStatus($status));
+
+        $summary = (clone $baseQuery)
+            ->selectRaw('COUNT(*) as campaigns_count')
+            ->selectRaw('COALESCE(SUM(total_recipients), 0) as total_recipients_sum')
+            ->selectRaw('COALESCE(SUM(sent_count), 0) as sent_count_sum')
+            ->selectRaw('COALESCE(SUM(failed_count), 0) as failed_count_sum')
+            ->selectRaw('COALESCE(SUM(pending_count), 0) as pending_count_sum')
+            ->selectRaw('COALESCE(SUM(queued_count), 0) as queued_count_sum')
+            ->first();
+
+        $statusCounts = (clone $baseQuery)
+            ->selectRaw('status, COUNT(*) as count')
+            ->groupBy('status')
+            ->pluck('count', 'status');
+
         $campaigns = $this->paginate(
-            SmsCampaign::with('creator')
-                ->when($request->search, fn ($q, $search) => $q->search($search))
-                ->when($request->status, fn ($q, $status) => $q->byStatus($status))
+            (clone $baseQuery)
+                ->with('creator')
                 ->latest(),
             $request,
             25
@@ -48,6 +65,15 @@ class CampaignController extends Controller
 
         return Inertia::render('Campaigns/Index', [
             'campaigns' => $campaigns,
+            'summary' => [
+                'campaigns_count' => (int) $summary->campaigns_count,
+                'total_recipients_sum' => (int) $summary->total_recipients_sum,
+                'sent_count_sum' => (int) $summary->sent_count_sum,
+                'failed_count_sum' => (int) $summary->failed_count_sum,
+                'pending_count_sum' => (int) $summary->pending_count_sum,
+                'queued_count_sum' => (int) $summary->queued_count_sum,
+                'status_counts' => $statusCounts,
+            ],
             'filters' => $request->only(['search', 'status', 'per_page']),
         ]);
     }

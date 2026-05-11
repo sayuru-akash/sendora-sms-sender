@@ -90,8 +90,12 @@ class SmsTemplate extends Model
 
     public function scopeSearch(Builder $query, string $search): Builder
     {
-        return $query->where('name', 'ilike', "%{$search}%")
-            ->orWhere('body', 'ilike', "%{$search}%");
+        $search = '%'.mb_strtolower($search).'%';
+
+        return $query->where(function (Builder $query) use ($search): void {
+            $query->whereRaw('LOWER(name) LIKE ?', [$search])
+                ->orWhereRaw('LOWER(body) LIKE ?', [$search]);
+        });
     }
 
     // Relationships

@@ -10,6 +10,7 @@ import {
   FileText,
   Send,
   BarChart3,
+  Activity,
   Settings,
   UserCog,
   ChevronLeft,
@@ -45,6 +46,7 @@ const navItems = computed<NavItem[]>(() => [
   { label: 'SMS Templates', href: route('templates.index'), icon: FileText, routeName: 'templates.*' },
   { label: 'Campaigns', href: route('campaigns.index'), icon: Send, routeName: 'campaigns.*' },
   { label: 'Reports', href: route('reports.index'), icon: BarChart3, routeName: 'reports.*' },
+  { label: 'Activity Logs', href: route('activity-logs.index'), icon: Activity, routeName: 'activity-logs.*' },
 ]);
 
 const bottomNavItems = computed<NavItem[]>(() => {

@@ -1,29 +1,87 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import AppLayout from '@/Components/layout/AppLayout.vue';
 import PageHeader from '@/Components/common/PageHeader.vue';
 import StatusBadge from '@/Components/common/StatusBadge.vue';
 import EmptyState from '@/Components/common/EmptyState.vue';
-import Card from '@/Components/ui/Card.vue';
-import CardContent from '@/Components/ui/CardContent.vue';
+import SearchInput from '@/Components/common/SearchInput.vue';
+import Pagination from '@/Components/common/Pagination.vue';
 import Button from '@/Components/ui/Button.vue';
 import Badge from '@/Components/ui/Badge.vue';
+import Select from '@/Components/ui/Select.vue';
 import DropdownMenu from '@/Components/ui/DropdownMenu.vue';
 import DropdownMenuItem from '@/Components/ui/DropdownMenuItem.vue';
 import DropdownMenuSeparator from '@/Components/ui/DropdownMenuSeparator.vue';
 import { Head, Link, router } from '@inertiajs/vue3';
 import { Send, Plus, MoreHorizontal, Eye, Copy, Pause, Play, XCircle, Trash2, BarChart3 } from 'lucide-vue-next';
 import type { Campaign } from '@/types/campaign';
-import type { Pagination } from '@/types';
+import type { Pagination as PaginationType } from '@/types';
 import { formatDate, formatNumber } from '@/lib/utils';
 import { useConfirm } from '@/composables/useConfirm';
 
 const props = defineProps<{
-  campaigns: { data: Campaign[]; meta: Pagination };
+  campaigns: { data: Campaign[]; meta: PaginationType };
+  summary: {
+    campaigns_count: number;
+    total_recipients_sum: number;
+    sent_count_sum: number;
+    failed_count_sum: number;
+    pending_count_sum: number;
+    queued_count_sum: number;
+    status_counts: Record<string, number>;
+  };
+  filters: {
+    search?: string;
+    status?: string;
+  };
 }>();
 
 const { confirm } = useConfirm();
+const search = ref(props.filters.search ?? '');
+const selectedStatus = ref(props.filters.status ?? '');
 let refreshTimer: number | undefined;
+
+const statusOptions = [
+  { label: 'All statuses', value: '' },
+  { label: 'Draft', value: 'draft' },
+  { label: 'Scheduled', value: 'scheduled' },
+  { label: 'Queued', value: 'queued' },
+  { label: 'Sending', value: 'sending' },
+  { label: 'Paused', value: 'paused' },
+  { label: 'Completed', value: 'completed' },
+  { label: 'Failed', value: 'failed' },
+  { label: 'Cancelled', value: 'cancelled' },
+];
+
+const activeWorkCount = computed(() => props.summary.pending_count_sum + props.summary.queued_count_sum);
+
+function successRateFor(campaign: Campaign) {
+  return Number.isFinite(Number(campaign.success_rate)) ? Number(campaign.success_rate) : 0;
+}
+
+function applyFilters() {
+  router.get(
+    route('campaigns.index'),
+    {
+      search: search.value || undefined,
+      status: selectedStatus.value || undefined,
+    },
+    {
+      preserveState: true,
+      preserveScroll: true,
+    },
+  );
+}
+
+function handleSearch(value: string) {
+  search.value = value;
+  applyFilters();
+}
+
+function handleStatusFilter(value: string | number) {
+  selectedStatus.value = String(value);
+  applyFilters();
+}
 
 async function deleteCampaign(campaign: Campaign) {
   const confirmed = await confirm({
@@ -55,7 +113,7 @@ function refreshCampaigns() {
   if (document.visibilityState !== 'visible') return;
 
   router.reload({
-    only: ['campaigns'],
+    only: ['campaigns', 'summary'],
   });
 }
 
@@ -72,7 +130,7 @@ onBeforeUnmount(() => {
   <Head title="Campaigns" />
 
   <AppLayout :breadcrumbs="[{ label: 'Campaigns' }]">
-    <PageHeader title="Campaigns" :subtitle="`${formatNumber(campaigns.meta.total)} campaigns`">
+    <PageHeader title="Campaigns" :subtitle="`${formatNumber(campaigns.meta.total)} campaigns in view`">
       <template #actions>
         <Link :href="route('campaigns.builder')">
           <Button>
@@ -83,11 +141,59 @@ onBeforeUnmount(() => {
       </template>
     </PageHeader>
 
+    <div class="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div class="rounded-lg border border-border bg-white px-4 py-3">
+        <p class="text-xs font-medium uppercase tracking-wide text-muted">Campaigns</p>
+        <p class="mt-1 text-2xl font-semibold text-foreground">{{ formatNumber(summary.campaigns_count) }}</p>
+      </div>
+      <div class="rounded-lg border border-border bg-white px-4 py-3">
+        <p class="text-xs font-medium uppercase tracking-wide text-muted">Recipients</p>
+        <p class="mt-1 text-2xl font-semibold text-foreground">{{ formatNumber(summary.total_recipients_sum) }}</p>
+      </div>
+      <div class="rounded-lg border border-border bg-white px-4 py-3">
+        <p class="text-xs font-medium uppercase tracking-wide text-muted">Sent</p>
+        <p class="mt-1 text-2xl font-semibold text-success">{{ formatNumber(summary.sent_count_sum) }}</p>
+      </div>
+      <div class="rounded-lg border border-border bg-white px-4 py-3">
+        <p class="text-xs font-medium uppercase tracking-wide text-muted">Needs Attention</p>
+        <p class="mt-1 text-2xl font-semibold text-danger">{{ formatNumber(summary.failed_count_sum) }}</p>
+        <p class="mt-1 text-xs text-muted">{{ formatNumber(activeWorkCount) }} queued or pending</p>
+      </div>
+    </div>
+
+    <div class="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+      <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <SearchInput
+          :model-value="search"
+          placeholder="Search campaigns..."
+          class="w-full sm:w-80"
+          @update:model-value="handleSearch"
+        />
+        <Select
+          :model-value="selectedStatus"
+          :options="statusOptions"
+          placeholder="Status"
+          class="w-full sm:w-44"
+          @update:model-value="handleStatusFilter"
+        />
+      </div>
+      <div class="flex flex-wrap gap-2">
+        <Badge
+          v-for="[status, count] in Object.entries(summary.status_counts)"
+          :key="status"
+          variant="outline"
+          class="capitalize"
+        >
+          {{ status }} · {{ formatNumber(count) }}
+        </Badge>
+      </div>
+    </div>
+
     <div v-if="campaigns.data.length === 0" class="py-8">
       <EmptyState
         :icon="Send"
-        title="No campaigns yet"
-        description="Create your first SMS campaign to start reaching your contacts."
+        :title="search || selectedStatus ? 'No campaigns found' : 'No campaigns yet'"
+        :description="search || selectedStatus ? 'Change the search or status filter to see more campaigns.' : 'Create your first SMS campaign to start reaching your contacts.'"
       >
         <template #action>
           <Link :href="route('campaigns.builder')">
@@ -101,14 +207,13 @@ onBeforeUnmount(() => {
     </div>
 
     <div v-else class="rounded-xl border border-border bg-white overflow-hidden">
-      <table class="w-full text-sm">
+      <div class="overflow-x-auto">
+      <table class="w-full min-w-[980px] text-sm">
         <thead>
           <tr class="border-b border-border">
             <th class="h-10 px-4 text-left font-medium text-muted text-xs uppercase tracking-wider">Campaign</th>
             <th class="h-10 px-4 text-left font-medium text-muted text-xs uppercase tracking-wider">Status</th>
             <th class="h-10 px-4 text-left font-medium text-muted text-xs uppercase tracking-wider">Recipients</th>
-            <th class="h-10 px-4 text-left font-medium text-muted text-xs uppercase tracking-wider">Sent</th>
-            <th class="h-10 px-4 text-left font-medium text-muted text-xs uppercase tracking-wider">Failed</th>
             <th class="h-10 px-4 text-left font-medium text-muted text-xs uppercase tracking-wider">Success Rate</th>
             <th class="h-10 px-4 text-left font-medium text-muted text-xs uppercase tracking-wider">Created</th>
             <th class="h-10 px-4 w-10"></th>
@@ -130,16 +235,20 @@ onBeforeUnmount(() => {
               <StatusBadge :status="campaign.status" />
             </td>
             <td class="px-4 py-3 text-sm text-foreground">
-              {{ formatNumber(campaign.total_recipients) }}
+              <div class="font-medium">{{ formatNumber(campaign.total_recipients) }}</div>
+              <div class="mt-1 flex flex-wrap gap-1.5 text-[11px]">
+                <span class="rounded-full bg-success/10 px-2 py-0.5 text-success">{{ formatNumber(campaign.sent_count) }} sent</span>
+                <span v-if="campaign.failed_count" class="rounded-full bg-danger-light px-2 py-0.5 text-danger">{{ formatNumber(campaign.failed_count) }} failed</span>
+                <span v-if="campaign.pending_count" class="rounded-full bg-gray-100 px-2 py-0.5 text-muted">{{ formatNumber(campaign.pending_count) }} pending</span>
+              </div>
             </td>
             <td class="px-4 py-3">
-              <span class="text-sm text-success font-medium">{{ formatNumber(campaign.sent_count) }}</span>
-            </td>
-            <td class="px-4 py-3">
-              <span class="text-sm text-danger font-medium">{{ formatNumber(campaign.failed_count) }}</span>
-            </td>
-            <td class="px-4 py-3 text-sm text-foreground">
-              {{ campaign.success_rate }}%
+              <div class="flex items-center gap-2">
+                <div class="h-2 w-24 overflow-hidden rounded-full bg-gray-100">
+                  <div class="h-full rounded-full bg-success" :style="{ width: `${Math.min(successRateFor(campaign), 100)}%` }" />
+                </div>
+                <span class="text-sm font-medium text-foreground">{{ successRateFor(campaign) }}%</span>
+              </div>
             </td>
             <td class="px-4 py-3">
               <p class="text-sm text-muted">{{ formatDate(campaign.created_at) }}</p>
@@ -183,6 +292,9 @@ onBeforeUnmount(() => {
           </tr>
         </tbody>
       </table>
+      </div>
     </div>
+
+    <Pagination :meta="campaigns.meta" />
   </AppLayout>
 </template>

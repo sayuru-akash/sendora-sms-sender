@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import AppLayout from '@/Components/layout/AppLayout.vue';
 import PageHeader from '@/Components/common/PageHeader.vue';
 import SearchInput from '@/Components/common/SearchInput.vue';
@@ -9,7 +9,7 @@ import Button from '@/Components/ui/Button.vue';
 import Badge from '@/Components/ui/Badge.vue';
 import Select from '@/Components/ui/Select.vue';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { Activity, Clock, Eye } from 'lucide-vue-next';
+import { Activity, ArrowUpRight, Clock, Eye, X } from 'lucide-vue-next';
 import type { ActivityLog, Pagination as PaginationType } from '@/types';
 import { formatDateTime, formatRelativeTime, truncate } from '@/lib/utils';
 
@@ -18,11 +18,19 @@ const props = defineProps<{
   filters: {
     search?: string;
     event?: string;
+    log_name?: string;
+    causer_id?: string | number;
+    subject_type?: string;
+    subject_id?: string | number;
+    per_page?: string | number;
   };
 }>();
 
 const search = ref(props.filters.search ?? '');
 const selectedEvent = ref(props.filters.event ?? '');
+const openActivityId = ref<number | null>(null);
+const hasScopedFilters = computed(() => Boolean(props.filters.subject_type || props.filters.subject_id || props.filters.causer_id || props.filters.log_name));
+const hasAnyFilters = computed(() => Boolean(search.value || selectedEvent.value || hasScopedFilters.value));
 
 const eventOptions = [
   { label: 'All Events', value: '' },
@@ -73,6 +81,10 @@ function applyFilters() {
     {
       search: search.value || undefined,
       event: selectedEvent.value || undefined,
+      log_name: props.filters.log_name || undefined,
+      causer_id: props.filters.causer_id || undefined,
+      subject_type: props.filters.subject_type || undefined,
+      subject_id: props.filters.subject_id || undefined,
     },
     { preserveState: true },
   );
@@ -106,6 +118,16 @@ function formatEventLabel(event: string): string {
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(' ');
 }
+
+function toggleActivityDetails(activityId: number) {
+  openActivityId.value = openActivityId.value === activityId ? null : activityId;
+}
+
+function clearFilters() {
+  search.value = '';
+  selectedEvent.value = '';
+  router.get(route('activity-logs.index'), {}, { preserveState: true });
+}
 </script>
 
 <template>
@@ -132,6 +154,16 @@ function formatEventLabel(event: string): string {
         class="w-full sm:w-48"
         @update:model-value="handleEventFilter"
       />
+      <Button
+        v-if="hasAnyFilters"
+        variant="ghost"
+        size="sm"
+        class="text-muted-foreground"
+        @click="clearFilters"
+      >
+        <X class="h-3.5 w-3.5" />
+        Clear
+      </Button>
     </div>
 
     <!-- Activity List -->
@@ -170,12 +202,18 @@ function formatEventLabel(event: string): string {
                 <span v-if="activity.subject_name"> · {{ truncate(activity.subject_name, 40) }}</span>
               </span>
             </div>
-            <details v-if="propertyEntries(activity.properties).length" class="group mt-3">
-              <summary class="cursor-pointer list-none text-xs font-medium text-primary hover:text-primary-dark">
-                <span class="group-open:hidden">Show details</span>
-                <span class="hidden group-open:inline">Hide details</span>
-              </summary>
-              <dl class="mt-2 grid grid-cols-1 gap-2 rounded-lg border border-border bg-white p-3 sm:grid-cols-2">
+            <Transition
+              enter-active-class="transition duration-150 ease-out"
+              enter-from-class="opacity-0 -translate-y-1"
+              enter-to-class="opacity-100 translate-y-0"
+              leave-active-class="transition duration-100 ease-in"
+              leave-from-class="opacity-100 translate-y-0"
+              leave-to-class="opacity-0 -translate-y-1"
+            >
+              <dl
+                v-if="openActivityId === activity.id && propertyEntries(activity.properties).length"
+                class="mt-3 grid grid-cols-1 gap-2 rounded-lg border border-border bg-white p-3 shadow-sm sm:grid-cols-2"
+              >
                 <div
                   v-for="[key, value] in propertyEntries(activity.properties)"
                   :key="key"
@@ -185,17 +223,28 @@ function formatEventLabel(event: string): string {
                   <dd class="mt-0.5 break-words text-xs text-foreground">{{ formatPropertyValue(value) }}</dd>
                 </div>
               </dl>
-            </details>
+            </Transition>
           </div>
 
           <!-- Timestamp -->
           <div class="shrink-0 text-right">
-            <Link v-if="activity.subject_url" :href="activity.subject_url" class="mb-2 inline-flex">
-              <Button size="sm" variant="outline">
+            <div class="mb-2 flex justify-end gap-2">
+              <Button
+                v-if="propertyEntries(activity.properties).length"
+                size="sm"
+                variant="outline"
+                @click="toggleActivityDetails(activity.id)"
+              >
                 <Eye class="h-3.5 w-3.5" />
-                View
+                {{ openActivityId === activity.id ? 'Hide' : 'Details' }}
               </Button>
-            </Link>
+              <Link v-if="activity.subject_url" :href="activity.subject_url" class="inline-flex">
+                <Button size="sm" variant="outline">
+                  <ArrowUpRight class="h-3.5 w-3.5" />
+                  {{ activity.subject_action_label ?? 'Open record' }}
+                </Button>
+              </Link>
+            </div>
             <p class="text-xs text-muted whitespace-nowrap">
               {{ formatRelativeTime(activity.created_at) }}
             </p>

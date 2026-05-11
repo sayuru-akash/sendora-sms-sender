@@ -16,6 +16,7 @@ use App\Services\Sms\SmsService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
+use Inertia\Testing\AssertableInertia as Assert;
 use Spatie\Activitylog\Models\Activity;
 use Tests\TestCase;
 
@@ -47,6 +48,48 @@ class CampaignTest extends TestCase
             'name' => 'Test Campaign',
             'status' => 'draft',
         ]);
+    }
+
+    public function test_campaign_index_exposes_filters_summary_and_paginated_numbers(): void
+    {
+        SmsCampaign::factory()->completed()->create([
+            'name' => 'Alpha Payment Campaign',
+            'status' => 'completed',
+            'total_recipients' => 12,
+            'sent_count' => 10,
+            'failed_count' => 2,
+            'pending_count' => 0,
+            'queued_count' => 0,
+            'created_by' => $this->manager->id,
+        ]);
+        SmsCampaign::factory()->create([
+            'name' => 'Beta Draft Campaign',
+            'status' => 'draft',
+            'total_recipients' => 5,
+            'sent_count' => 0,
+            'failed_count' => 0,
+            'pending_count' => 5,
+            'created_by' => $this->manager->id,
+        ]);
+
+        $this->actingAs($this->manager)
+            ->get('/campaigns?search=Alpha&status=completed')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Campaigns/Index')
+                ->where('filters.search', 'Alpha')
+                ->where('filters.status', 'completed')
+                ->where('campaigns.meta.total', 1)
+                ->where('campaigns.data.0.name', 'Alpha Payment Campaign')
+                ->where('campaigns.data.0.total_recipients', 12)
+                ->where('campaigns.data.0.sent_count', 10)
+                ->where('campaigns.data.0.failed_count', 2)
+                ->where('summary.campaigns_count', 1)
+                ->where('summary.total_recipients_sum', 12)
+                ->where('summary.sent_count_sum', 10)
+                ->where('summary.failed_count_sum', 2)
+                ->where('summary.status_counts.completed', 1)
+            );
     }
 
     public function test_can_create_long_multi_segment_campaign_message(): void

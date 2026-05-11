@@ -2,19 +2,19 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use Illuminate\Database\Eloquent\Builder;
 use Spatie\Activitylog\Models\Concerns\LogsActivity;
 use Spatie\Activitylog\Support\LogOptions;
 
 class Contact extends Model
 {
-    use HasFactory, SoftDeletes, LogsActivity;
+    use HasFactory, LogsActivity, SoftDeletes;
 
     protected $fillable = [
         'uuid',
@@ -66,8 +66,9 @@ class Contact extends Model
             return $this->full_name;
         }
         if ($this->first_name || $this->last_name) {
-            return trim($this->first_name . ' ' . $this->last_name);
+            return trim($this->first_name.' '.$this->last_name);
         }
+
         return $this->phone;
     }
 
@@ -130,14 +131,16 @@ class Contact extends Model
 
     public function scopeSearch(Builder $query, string $search): Builder
     {
+        $search = '%'.mb_strtolower($search).'%';
+
         return $query->where(function ($q) use ($search) {
-            $q->where('full_name', 'LIKE', "%{$search}%")
-              ->orWhere('first_name', 'LIKE', "%{$search}%")
-              ->orWhere('last_name', 'LIKE', "%{$search}%")
-              ->orWhere('phone', 'LIKE', "%{$search}%")
-              ->orWhere('phone_normalised', 'LIKE', "%{$search}%")
-              ->orWhere('email', 'LIKE', "%{$search}%")
-              ->orWhere('company', 'LIKE', "%{$search}%");
+            $q->whereRaw("LOWER(COALESCE(full_name, '')) LIKE ?", [$search])
+                ->orWhereRaw("LOWER(COALESCE(first_name, '')) LIKE ?", [$search])
+                ->orWhereRaw("LOWER(COALESCE(last_name, '')) LIKE ?", [$search])
+                ->orWhereRaw("LOWER(COALESCE(phone, '')) LIKE ?", [$search])
+                ->orWhereRaw("LOWER(COALESCE(phone_normalised, '')) LIKE ?", [$search])
+                ->orWhereRaw("LOWER(COALESCE(email, '')) LIKE ?", [$search])
+                ->orWhereRaw("LOWER(COALESCE(company, '')) LIKE ?", [$search]);
         });
     }
 

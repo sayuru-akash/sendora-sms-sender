@@ -221,7 +221,7 @@ class SmsCampaign extends Model
 
     public function scopeSearch(Builder $query, string $search): Builder
     {
-        return $query->where('name', 'ilike', "%{$search}%");
+        return $query->whereRaw('LOWER(name) LIKE ?', ['%'.mb_strtolower($search).'%']);
     }
 
     // Relationships

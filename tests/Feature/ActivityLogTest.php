@@ -22,7 +22,7 @@ class ActivityLogTest extends TestCase
             'created_by' => $user->id,
         ]);
 
-        activity()
+        $activity = activity()
             ->performedOn($campaign)
             ->causedBy($user)
             ->event('resend_queued')
@@ -39,7 +39,8 @@ class ActivityLogTest extends TestCase
                 ->component('ActivityLogs/Index')
                 ->where('activities.data.0.event', 'resend_queued')
                 ->where('activities.data.0.subject_name', 'Retry Audit Campaign')
-                ->where('activities.data.0.subject_url', route('campaigns.show', $campaign))
+                ->where('activities.data.0.subject_url', route('campaigns.show', ['campaign' => $campaign, 'activity_id' => $activity->id]).'#activity')
+                ->where('activities.data.0.subject_action_label', 'Open campaign')
                 ->where('activities.data.0.properties.recipient_count', 2)
             );
     }
@@ -88,7 +89,7 @@ class ActivityLogTest extends TestCase
             'created_by' => $user->id,
         ]);
 
-        activity()
+        $activity = activity()
             ->performedOn($campaign)
             ->causedBy($user)
             ->event('completed')
@@ -101,7 +102,7 @@ class ActivityLogTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Campaigns/Show')
                 ->where('recent_activities.0.event', 'completed')
-                ->where('recent_activities.0.subject_url', route('campaigns.show', $campaign))
+                ->where('recent_activities.0.subject_url', route('campaigns.show', ['campaign' => $campaign, 'activity_id' => $activity->id]).'#activity')
             );
     }
 
@@ -127,5 +128,43 @@ class ActivityLogTest extends TestCase
         $this->assertSame('completed', $activity->properties['status']);
         $this->assertSame(1, $activity->properties['sent_count']);
         $this->assertSame('Asia/Colombo', $activity->properties['timezone']);
+    }
+
+    public function test_activity_log_search_includes_properties_and_causer(): void
+    {
+        $user = User::factory()->manager()->create([
+            'name' => 'Audit Owner',
+        ]);
+        $campaign = SmsCampaign::factory()->create([
+            'name' => 'Property Search Campaign',
+            'created_by' => $user->id,
+        ]);
+
+        activity()
+            ->performedOn($campaign)
+            ->causedBy($user)
+            ->event('recipient_failed')
+            ->withProperties([
+                'name' => $campaign->name,
+                'error_message' => 'Provider timeout reference ZX-900',
+            ])
+            ->log('Campaign recipient failed');
+
+        $this->actingAs($user)
+            ->get('/activity-logs?search=ZX-900')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('ActivityLogs/Index')
+                ->where('activities.meta.total', 1)
+                ->where('activities.data.0.properties.error_message', 'Provider timeout reference ZX-900')
+            );
+
+        $this->actingAs($user)
+            ->get('/activity-logs?search=Audit%20Owner')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('activities.meta.total', 1)
+                ->where('activities.data.0.causer_name', 'Audit Owner')
+            );
     }
 }
