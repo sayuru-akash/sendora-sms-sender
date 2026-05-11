@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\CampaignRecipient;
 use App\Models\Contact;
 use App\Models\Import;
 use App\Models\SmsCampaign;
@@ -139,6 +140,24 @@ class ActivityLogger
                 'total_recipients' => $campaign->total_recipients,
             ])
             ->log('Campaign sent');
+    }
+
+    public function logCampaignResendQueued(SmsCampaign $campaign, int $recipientCount, ?CampaignRecipient $recipient = null): Activity
+    {
+        return activity()
+            ->performedOn($campaign)
+            ->causedBy(auth()->user())
+            ->event('resend_queued')
+            ->withProperties([
+                'name' => $campaign->name,
+                'recipient_count' => $recipientCount,
+                'recipient_id' => $recipient?->id,
+                'contact_id' => $recipient?->contact_id,
+                'phone' => $recipient?->phone_normalised,
+                'queued_at' => now()->toIso8601String(),
+                'timezone' => config('app.timezone'),
+            ])
+            ->log($recipient ? 'Campaign recipient resend queued' : 'Campaign failed recipients resend queued');
     }
 
     /**

@@ -1,6 +1,8 @@
 import { type ClassValue, clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
+export const APP_TIME_ZONE = 'Asia/Colombo';
+
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
@@ -11,6 +13,7 @@ export function formatNumber(value: number): string {
 
 export function formatDate(date: string, options?: Intl.DateTimeFormatOptions): string {
   return new Date(date).toLocaleDateString('en-US', {
+    timeZone: APP_TIME_ZONE,
     year: 'numeric',
     month: 'short',
     day: 'numeric',
@@ -20,11 +23,13 @@ export function formatDate(date: string, options?: Intl.DateTimeFormatOptions): 
 
 export function formatDateTime(date: string): string {
   return new Date(date).toLocaleString('en-US', {
+    timeZone: APP_TIME_ZONE,
     year: 'numeric',
     month: 'short',
     day: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
+    timeZoneName: 'shortOffset',
   });
 }
 

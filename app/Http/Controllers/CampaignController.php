@@ -7,6 +7,7 @@ use App\Http\Requests\CampaignSendRequest;
 use App\Jobs\FinalizeCampaign;
 use App\Jobs\PrepareCampaignRecipients;
 use App\Jobs\SendCampaignMessages;
+use App\Jobs\SendSingleSms;
 use App\Models\CampaignRecipient;
 use App\Models\Contact;
 use App\Models\ListModel;
@@ -20,6 +21,8 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
@@ -327,6 +330,91 @@ class CampaignController extends Controller
             ->with('success', 'Campaign sending has started.');
     }
 
+    public function resendFailed(Request $request, SmsCampaign $campaign): JsonResponse|RedirectResponse
+    {
+        $this->authorize('send', $campaign);
+
+        $recipients = DB::transaction(function () use ($campaign): Collection {
+            $campaign->refresh();
+
+            if (! $campaign->canRetryFailedRecipients()) {
+                abort(422, 'This campaign has no failed recipients to resend.');
+            }
+
+            $recipients = CampaignRecipient::where('campaign_id', $campaign->id)
+                ->where('status', 'failed')
+                ->lockForUpdate()
+                ->get();
+
+            if ($recipients->isEmpty()) {
+                abort(422, 'This campaign has no failed recipients to resend.');
+            }
+
+            $this->resetFailedRecipientsForRetry($recipients);
+            $this->refreshCampaignRecipientCounts($campaign);
+            $campaign->markSending();
+
+            return $recipients->fresh();
+        });
+
+        $this->dispatchRetryRecipients($campaign->fresh(), $recipients);
+        $this->activityLogger->logCampaignResendQueued($campaign->fresh(), $recipients->count());
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'campaign' => $campaign->fresh(),
+                'message' => "{$recipients->count()} failed recipient(s) queued for resend.",
+            ]);
+        }
+
+        return redirect()->route('campaigns.show', $campaign)
+            ->with('success', "{$recipients->count()} failed recipient(s) queued for resend.");
+    }
+
+    public function resendRecipient(Request $request, SmsCampaign $campaign, CampaignRecipient $recipient): JsonResponse|RedirectResponse
+    {
+        $this->authorize('send', $campaign);
+
+        $recipients = DB::transaction(function () use ($campaign, $recipient): Collection {
+            $campaign->refresh();
+
+            if (! $campaign->canRetryFailedRecipients()) {
+                abort(422, 'This campaign has no failed recipients to resend.');
+            }
+
+            $recipient = CampaignRecipient::where('campaign_id', $campaign->id)
+                ->whereKey($recipient->id)
+                ->where('status', 'failed')
+                ->lockForUpdate()
+                ->first();
+
+            if (! $recipient) {
+                abort(422, 'Only failed recipients can be resent.');
+            }
+
+            $recipients = collect([$recipient]);
+
+            $this->resetFailedRecipientsForRetry($recipients);
+            $this->refreshCampaignRecipientCounts($campaign);
+            $campaign->markSending();
+
+            return $recipients->map->fresh();
+        });
+
+        $this->dispatchRetryRecipients($campaign->fresh(), $recipients);
+        $this->activityLogger->logCampaignResendQueued($campaign->fresh(), 1, $recipients->first());
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'campaign' => $campaign->fresh(),
+                'message' => 'Recipient queued for resend.',
+            ]);
+        }
+
+        return redirect()->route('campaigns.show', $campaign)
+            ->with('success', 'Recipient queued for resend.');
+    }
+
     protected function dispatchCampaignSend(SmsCampaign $campaign): void
     {
         $campaign->markQueued();
@@ -336,6 +424,49 @@ class CampaignController extends Controller
                 new SendCampaignMessages($campaign),
                 new FinalizeCampaign($campaign),
             ]);
+    }
+
+    /**
+     * @param  Collection<int, CampaignRecipient>  $recipients
+     */
+    protected function resetFailedRecipientsForRetry(Collection $recipients): void
+    {
+        CampaignRecipient::whereKey($recipients->pluck('id')->all())->update([
+            'status' => 'pending',
+            'queued_at' => null,
+            'sent_at' => null,
+            'failed_at' => null,
+            'provider_message_id' => null,
+            'provider_response' => null,
+            'error_message' => null,
+            'updated_at' => now(),
+        ]);
+    }
+
+    protected function refreshCampaignRecipientCounts(SmsCampaign $campaign): void
+    {
+        $counts = CampaignRecipient::where('campaign_id', $campaign->id)
+            ->selectRaw('status, COUNT(*) as count')
+            ->groupBy('status')
+            ->pluck('count', 'status');
+
+        $campaign->forceFill([
+            'total_recipients' => $counts->sum(),
+            'pending_count' => (int) ($counts['pending'] ?? 0),
+            'queued_count' => (int) ($counts['queued'] ?? 0),
+            'sent_count' => (int) ($counts['sent'] ?? 0),
+            'failed_count' => (int) ($counts['failed'] ?? 0),
+            'skipped_count' => (int) ($counts['skipped'] ?? 0),
+        ])->save();
+    }
+
+    /**
+     * @param  Collection<int, CampaignRecipient>  $recipients
+     */
+    protected function dispatchRetryRecipients(SmsCampaign $campaign, Collection $recipients): void
+    {
+        $recipients->each(fn (CampaignRecipient $recipient) => SendSingleSms::dispatch($campaign, $recipient));
+        FinalizeCampaign::dispatch($campaign);
     }
 
     /**

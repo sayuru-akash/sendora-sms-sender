@@ -25,7 +25,7 @@ return [
     | TextWare API URL
     |--------------------------------------------------------------------------
     */
-    'api_url' => env('SMS_API_URL', 'https://msg.text-ware.com/send_sms.php'),
+    'api_url' => env('SMS_API_URL', 'https://textware.lk/send_sms.php'),
 
     /*
     |--------------------------------------------------------------------------

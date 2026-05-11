@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed, ref } from 'vue';
 import AppLayout from '@/Components/layout/AppLayout.vue';
 import PageHeader from '@/Components/common/PageHeader.vue';
 import StatusBadge from '@/Components/common/StatusBadge.vue';
@@ -12,7 +13,7 @@ import CardTitle from '@/Components/ui/CardTitle.vue';
 import Button from '@/Components/ui/Button.vue';
 import Badge from '@/Components/ui/Badge.vue';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { Send, CheckCircle, XCircle, SkipForward, Clock, Pause, Play, XCircleIcon, BarChart3 } from 'lucide-vue-next';
+import { Send, CheckCircle, XCircle, SkipForward, Clock, Pause, Play, XCircleIcon, BarChart3, RotateCcw } from 'lucide-vue-next';
 import type { Campaign, CampaignRecipient } from '@/types/campaign';
 import type { Pagination } from '@/types';
 import { formatDate, formatDateTime, formatNumber } from '@/lib/utils';
@@ -24,6 +25,10 @@ const props = defineProps<{
 }>();
 
 const { confirm } = useConfirm();
+const isResendingFailed = ref(false);
+const retryingRecipientId = ref<number | null>(null);
+
+const canResendFailed = computed(() => ['completed', 'failed'].includes(props.campaign.status) && props.campaign.failed_count > 0);
 
 function pauseCampaign() {
   router.post(route('campaigns.pause', props.campaign.id));
@@ -38,6 +43,40 @@ async function sendCampaign() {
     confirmLabel: 'Send Campaign',
   });
   if (confirmed) router.post(route('campaigns.send', props.campaign.id), { confirmed: true });
+}
+async function resendFailedCampaign() {
+  const confirmed = await confirm({
+    title: 'Resend Failed',
+    message: `Queue ${props.campaign.failed_count} failed recipient${props.campaign.failed_count === 1 ? '' : 's'} for resend?`,
+    confirmLabel: 'Resend Failed',
+  });
+
+  if (!confirmed) return;
+
+  isResendingFailed.value = true;
+  router.post(route('campaigns.resend-failed', props.campaign.id), {}, {
+    preserveScroll: true,
+    onFinish: () => {
+      isResendingFailed.value = false;
+    },
+  });
+}
+async function resendRecipient(recipient: CampaignRecipient) {
+  const confirmed = await confirm({
+    title: 'Resend Recipient',
+    message: `Queue another SMS to ${recipient.contact_name}?`,
+    confirmLabel: 'Resend',
+  });
+
+  if (!confirmed) return;
+
+  retryingRecipientId.value = recipient.id;
+  router.post(route('campaigns.recipients.resend', [props.campaign.id, recipient.id]), {}, {
+    preserveScroll: true,
+    onFinish: () => {
+      retryingRecipientId.value = null;
+    },
+  });
 }
 async function cancelCampaign() {
   const confirmed = await confirm({
@@ -76,6 +115,10 @@ const stats = [
         <Button v-if="campaign.status === 'draft'" @click="sendCampaign">
           <Send class="h-4 w-4" />
           Send
+        </Button>
+        <Button v-if="canResendFailed" variant="outline" :loading="isResendingFailed" @click="resendFailedCampaign">
+          <RotateCcw class="h-4 w-4" />
+          Resend Failed
         </Button>
         <Button v-if="campaign.status === 'sending'" variant="outline" @click="pauseCampaign">
           <Pause class="h-4 w-4" />
@@ -173,6 +216,7 @@ const stats = [
                 <th class="h-10 px-4 text-left font-medium text-muted text-xs uppercase">Status</th>
                 <th class="h-10 px-4 text-left font-medium text-muted text-xs uppercase">Error</th>
                 <th class="h-10 px-4 text-left font-medium text-muted text-xs uppercase">Sent At</th>
+                <th class="h-10 px-4 text-right font-medium text-muted text-xs uppercase">Action</th>
               </tr>
             </thead>
             <tbody>
@@ -180,8 +224,28 @@ const stats = [
                 <td class="px-4 py-3 text-sm text-foreground">{{ r.contact_name }}</td>
                 <td class="px-4 py-3 text-sm text-foreground">{{ r.contact_phone }}</td>
                 <td class="px-4 py-3"><StatusBadge :status="r.status" /></td>
-                <td class="px-4 py-3 text-xs text-danger">{{ r.error_message ?? '—' }}</td>
+                <td class="px-4 py-3 text-xs text-danger">
+                  <span class="line-clamp-2">{{ r.error_message ?? '—' }}</span>
+                </td>
                 <td class="px-4 py-3 text-xs text-muted">{{ r.sent_at ? formatDateTime(r.sent_at) : '—' }}</td>
+                <td class="px-4 py-3 text-right">
+                  <Button
+                    v-if="r.status === 'failed' && canResendFailed"
+                    size="sm"
+                    variant="outline"
+                    :loading="retryingRecipientId === r.id"
+                    @click="resendRecipient(r)"
+                  >
+                    <RotateCcw class="h-3.5 w-3.5" />
+                    Resend
+                  </Button>
+                  <span v-else class="text-xs text-muted">—</span>
+                </td>
+              </tr>
+              <tr v-if="recipients.data.length === 0">
+                <td colspan="6" class="px-4 py-8 text-center text-sm text-muted">
+                  No recipients prepared yet.
+                </td>
               </tr>
             </tbody>
           </table>

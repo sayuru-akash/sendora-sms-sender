@@ -155,6 +155,11 @@ class SmsCampaign extends Model
         return in_array($this->status, ['draft', 'scheduled', 'queued', 'paused', 'sending']);
     }
 
+    public function canRetryFailedRecipients(): bool
+    {
+        return in_array($this->status, ['completed', 'failed']) && $this->failed_count > 0;
+    }
+
     public function getSuccessRateAttribute(): float
     {
         if (! $this->total_recipients) {

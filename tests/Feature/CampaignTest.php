@@ -2,7 +2,10 @@
 
 namespace Tests\Feature;
 
+use App\Jobs\FinalizeCampaign;
 use App\Jobs\PrepareCampaignRecipients;
+use App\Jobs\SendSingleSms;
+use App\Models\CampaignRecipient;
 use App\Models\Contact;
 use App\Models\ListModel;
 use App\Models\SmsCampaign;
@@ -52,6 +55,22 @@ class CampaignTest extends TestCase
         $response->assertCreated();
         $this->assertDatabaseHas('sms_campaigns', [
             'name' => 'Long Payment Reminder',
+        ]);
+    }
+
+    public function test_campaign_sender_id_can_use_registered_name_with_space(): void
+    {
+        $response = $this->actingAs($this->staff)->postJson('/campaigns', [
+            'name' => 'Registered Sender Campaign',
+            'sender_id' => 'SITC Campus',
+            'message_body' => 'Hello from Sendora!',
+            'target_type' => 'all_contacts',
+        ]);
+
+        $response->assertCreated();
+        $this->assertDatabaseHas('sms_campaigns', [
+            'name' => 'Registered Sender Campaign',
+            'sender_id' => 'SITC Campus',
         ]);
     }
 
@@ -290,6 +309,121 @@ class CampaignTest extends TestCase
 
         // Should succeed (200 or redirect)
         $response->assertStatus(200);
+    }
+
+    public function test_manager_can_resend_one_failed_campaign_recipient(): void
+    {
+        Queue::fake();
+
+        $campaign = SmsCampaign::factory()->completed()->create([
+            'total_recipients' => 1,
+            'failed_count' => 1,
+            'created_by' => $this->manager->id,
+        ]);
+        $contact = Contact::factory()->active()->create();
+        $recipient = CampaignRecipient::create([
+            'campaign_id' => $campaign->id,
+            'contact_id' => $contact->id,
+            'phone_normalised' => $contact->phone_normalised,
+            'status' => 'failed',
+            'failed_at' => now(),
+            'error_message' => 'Provider rejected the message.',
+            'provider_response' => ['status_code' => 400],
+            'attempt_count' => 1,
+        ]);
+
+        $response = $this->actingAs($this->manager)
+            ->postJson("/campaigns/{$campaign->id}/recipients/{$recipient->id}/resend");
+
+        $response->assertOk();
+
+        $recipient->refresh();
+        $campaign->refresh();
+
+        $this->assertSame('pending', $recipient->status);
+        $this->assertNull($recipient->failed_at);
+        $this->assertNull($recipient->error_message);
+        $this->assertSame(1, $recipient->attempt_count);
+        $this->assertSame('sending', $campaign->status);
+        $this->assertSame(1, $campaign->pending_count);
+        $this->assertSame(0, $campaign->failed_count);
+
+        Queue::assertPushed(SendSingleSms::class);
+        Queue::assertPushed(FinalizeCampaign::class);
+    }
+
+    public function test_manager_can_resend_all_failed_campaign_recipients(): void
+    {
+        Queue::fake();
+
+        $campaign = SmsCampaign::factory()->completed()->create([
+            'total_recipients' => 3,
+            'sent_count' => 1,
+            'failed_count' => 2,
+            'created_by' => $this->manager->id,
+        ]);
+        $sentContact = Contact::factory()->active()->create();
+        $failedContacts = Contact::factory()->active()->count(2)->create();
+
+        CampaignRecipient::create([
+            'campaign_id' => $campaign->id,
+            'contact_id' => $sentContact->id,
+            'phone_normalised' => $sentContact->phone_normalised,
+            'status' => 'sent',
+            'sent_at' => now(),
+        ]);
+
+        $failedContacts->each(function (Contact $contact) use ($campaign): void {
+            CampaignRecipient::create([
+                'campaign_id' => $campaign->id,
+                'contact_id' => $contact->id,
+                'phone_normalised' => $contact->phone_normalised,
+                'status' => 'failed',
+                'failed_at' => now(),
+                'error_message' => 'Provider rejected the message.',
+            ]);
+        });
+
+        $response = $this->actingAs($this->manager)
+            ->postJson("/campaigns/{$campaign->id}/resend-failed");
+
+        $response->assertOk();
+
+        $campaign->refresh();
+
+        $this->assertSame('sending', $campaign->status);
+        $this->assertSame(3, $campaign->total_recipients);
+        $this->assertSame(2, $campaign->pending_count);
+        $this->assertSame(1, $campaign->sent_count);
+        $this->assertSame(0, $campaign->failed_count);
+        $this->assertSame(2, CampaignRecipient::where('campaign_id', $campaign->id)->where('status', 'pending')->count());
+
+        Queue::assertPushed(SendSingleSms::class, 2);
+        Queue::assertPushed(FinalizeCampaign::class);
+    }
+
+    public function test_failed_recipients_cannot_be_resent_while_campaign_is_active(): void
+    {
+        Queue::fake();
+
+        $campaign = SmsCampaign::factory()->sending()->create([
+            'total_recipients' => 1,
+            'failed_count' => 1,
+            'created_by' => $this->manager->id,
+        ]);
+        $contact = Contact::factory()->active()->create();
+        CampaignRecipient::create([
+            'campaign_id' => $campaign->id,
+            'contact_id' => $contact->id,
+            'phone_normalised' => $contact->phone_normalised,
+            'status' => 'failed',
+        ]);
+
+        $response = $this->actingAs($this->manager)
+            ->postJson("/campaigns/{$campaign->id}/resend-failed");
+
+        $response->assertStatus(422);
+        Queue::assertNothingPushed();
     }
 
     public function test_campaign_cancel_works(): void

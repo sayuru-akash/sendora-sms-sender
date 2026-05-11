@@ -10,7 +10,7 @@ import Select from '@/Components/ui/Select.vue';
 import { Head, router } from '@inertiajs/vue3';
 import { Activity, Clock } from 'lucide-vue-next';
 import type { ActivityLog, Pagination as PaginationType } from '@/types';
-import { formatRelativeTime, truncate } from '@/lib/utils';
+import { formatDateTime, formatRelativeTime, truncate } from '@/lib/utils';
 
 const props = defineProps<{
   activities: { data: ActivityLog[]; meta: PaginationType };
@@ -30,6 +30,7 @@ const eventOptions = [
   { label: 'Deleted', value: 'deleted' },
   { label: 'Restored', value: 'restored' },
   { label: 'Sent', value: 'sent' },
+  { label: 'Resend Queued', value: 'resend_queued' },
   { label: 'Failed', value: 'failed' },
   { label: 'Imported', value: 'imported' },
   { label: 'Exported', value: 'exported' },
@@ -41,6 +42,7 @@ const eventBadgeVariant: Record<string, 'default' | 'secondary' | 'success' | 'd
   deleted: 'danger',
   restored: 'warning',
   sent: 'success',
+  resend_queued: 'warning',
   failed: 'danger',
   imported: 'info',
   exported: 'secondary',
@@ -135,6 +137,9 @@ function handleEventFilter(val: string | number) {
           <div class="shrink-0 text-right">
             <p class="text-xs text-muted whitespace-nowrap">
               {{ formatRelativeTime(activity.created_at) }}
+            </p>
+            <p class="mt-1 text-[11px] text-muted-foreground whitespace-nowrap">
+              {{ formatDateTime(activity.created_at) }}
             </p>
           </div>
         </div>

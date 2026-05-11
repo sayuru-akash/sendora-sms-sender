@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import AppLayout from '@/Components/layout/AppLayout.vue';
 import PageHeader from '@/Components/common/PageHeader.vue';
 import Card from '@/Components/ui/Card.vue';
@@ -8,11 +8,12 @@ import CardHeader from '@/Components/ui/CardHeader.vue';
 import CardTitle from '@/Components/ui/CardTitle.vue';
 import Button from '@/Components/ui/Button.vue';
 import StatCard from '@/Components/common/StatCard.vue';
-import { Head } from '@inertiajs/vue3';
-import { Download, CheckCircle, XCircle, SkipForward, Clock } from 'lucide-vue-next';
+import { Head, router } from '@inertiajs/vue3';
+import { Download, CheckCircle, XCircle, Clock, RotateCcw } from 'lucide-vue-next';
 import type { Campaign, CampaignStats } from '@/types/campaign';
 import { formatNumber } from '@/lib/utils';
 import VChart from 'vue-echarts';
+import { useConfirm } from '@/composables/useConfirm';
 import { use } from 'echarts/core';
 import { CanvasRenderer } from 'echarts/renderers';
 import { PieChart, LineChart } from 'echarts/charts';
@@ -24,6 +25,10 @@ const props = defineProps<{
   campaign: Campaign;
   stats: CampaignStats;
 }>();
+
+const { confirm } = useConfirm();
+const isResendingFailed = ref(false);
+const canResendFailed = computed(() => ['completed', 'failed'].includes(props.campaign.status) && props.stats.failed > 0);
 
 const pieOption = computed(() => ({
   tooltip: { trigger: 'item', backgroundColor: '#fff', borderColor: '#e5e7eb', textStyle: { color: '#1a1a1a', fontSize: 12 } },
@@ -60,6 +65,24 @@ const statCards = [
   { label: 'Failed', value: props.stats.failed, icon: XCircle, color: 'text-danger', bg: 'bg-danger-light' },
   { label: 'Success Rate', value: props.stats.success_rate, icon: CheckCircle, color: 'text-success', bg: 'bg-success-light', format: 'percent' as const },
 ];
+
+async function resendFailedCampaign() {
+  const confirmed = await confirm({
+    title: 'Resend Failed',
+    message: `Queue ${props.stats.failed} failed recipient${props.stats.failed === 1 ? '' : 's'} for resend?`,
+    confirmLabel: 'Resend Failed',
+  });
+
+  if (!confirmed) return;
+
+  isResendingFailed.value = true;
+  router.post(route('campaigns.resend-failed', props.campaign.id), {}, {
+    preserveScroll: true,
+    onFinish: () => {
+      isResendingFailed.value = false;
+    },
+  });
+}
 </script>
 
 <template>
@@ -75,6 +98,10 @@ const statCards = [
         <Button variant="outline">
           <Download class="h-4 w-4" />
           Export
+        </Button>
+        <Button v-if="canResendFailed" variant="outline" :loading="isResendingFailed" @click="resendFailedCampaign">
+          <RotateCcw class="h-4 w-4" />
+          Resend Failed
         </Button>
       </template>
     </PageHeader>

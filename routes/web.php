@@ -56,6 +56,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/campaigns/audience/contacts', [CampaignController::class, 'audienceContacts'])->name('campaigns.audience.contacts');
     Route::post('/campaigns/audience/estimate', [CampaignController::class, 'audienceEstimate'])->name('campaigns.audience.estimate');
     Route::post('/campaigns/{campaign}/send', [CampaignController::class, 'send'])->name('campaigns.send');
+    Route::post('/campaigns/{campaign}/resend-failed', [CampaignController::class, 'resendFailed'])->name('campaigns.resend-failed');
+    Route::post('/campaigns/{campaign}/recipients/{recipient}/resend', [CampaignController::class, 'resendRecipient'])->name('campaigns.recipients.resend');
     Route::post('/campaigns/{campaign}/pause', [CampaignController::class, 'pause'])->name('campaigns.pause');
     Route::post('/campaigns/{campaign}/resume', [CampaignController::class, 'resume'])->name('campaigns.resume');
     Route::post('/campaigns/{campaign}/cancel', [CampaignController::class, 'cancel'])->name('campaigns.cancel');

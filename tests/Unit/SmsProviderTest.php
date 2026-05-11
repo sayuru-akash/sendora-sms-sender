@@ -15,10 +15,10 @@ class SmsProviderTest extends TestCase
         config()->set('sms.username', 'testuser');
         config()->set('sms.password', 'testpass');
         config()->set('sms.source', 'SENDER');
-        config()->set('sms.api_url', 'https://msg.text-ware.com/send_sms.php');
+        config()->set('sms.api_url', 'https://textware.lk/send_sms.php');
 
         Http::fake([
-            'msg.text-ware.com/*' => Http::response('OK', 200),
+            'textware.lk/*' => Http::response('OK', 200),
         ]);
 
         $provider = new TextWareProvider;
@@ -29,7 +29,7 @@ class SmsProviderTest extends TestCase
         $this->assertTrue($result->sent);
 
         Http::assertSent(function ($request) {
-            return str_starts_with($request->url(), 'https://msg.text-ware.com/send_sms.php?')
+            return str_starts_with($request->url(), 'https://textware.lk/send_sms.php?')
                 && $request->data()['username'] === 'testuser'
                 && $request->data()['src'] === 'SENDER'
                 && $request->data()['dst'] === '94771234567'
@@ -38,15 +38,38 @@ class SmsProviderTest extends TestCase
         });
     }
 
+    public function test_textware_provider_preserves_registered_sender_id_with_space(): void
+    {
+        config()->set('sms.username', 'testuser');
+        config()->set('sms.password', 'testpass');
+        config()->set('sms.source', 'SITC Campus');
+        config()->set('sms.api_url', 'https://textware.lk/send_sms.php');
+
+        Http::fake([
+            'textware.lk/*' => Http::response('OK', 200),
+        ]);
+
+        $provider = new TextWareProvider;
+        $result = $provider->send('94771234567', 'Test message');
+
+        $this->assertTrue($result->success);
+
+        Http::assertSent(function ($request) {
+            return str_starts_with($request->url(), 'https://textware.lk/send_sms.php?')
+                && $request->data()['src'] === 'SITC Campus'
+                && str_contains($request->url(), 'src=SITC%20Campus');
+        });
+    }
+
     public function test_provider_returns_failure_on_error(): void
     {
         config()->set('sms.username', 'testuser');
         config()->set('sms.password', 'testpass');
         config()->set('sms.source', 'SENDER');
-        config()->set('sms.api_url', 'https://msg.text-ware.com/send_sms.php');
+        config()->set('sms.api_url', 'https://textware.lk/send_sms.php');
 
         Http::fake([
-            'msg.text-ware.com/*' => Http::response('Invalid credentials', 401),
+            'textware.lk/*' => Http::response('Invalid credentials', 401),
         ]);
 
         $provider = new TextWareProvider;
@@ -61,10 +84,10 @@ class SmsProviderTest extends TestCase
         config()->set('sms.username', 'testuser');
         config()->set('sms.password', 'testpass');
         config()->set('sms.source', 'SENDER');
-        config()->set('sms.api_url', 'https://msg.text-ware.com/send_sms.php');
+        config()->set('sms.api_url', 'https://textware.lk/send_sms.php');
 
         Http::fake([
-            'msg.text-ware.com/*' => function () {
+            'textware.lk/*' => function () {
                 throw new ConnectionException('Connection timed out');
             },
         ]);
@@ -81,7 +104,7 @@ class SmsProviderTest extends TestCase
     {
         config()->set('sms.username', null);
         config()->set('sms.password', null);
-        config()->set('sms.api_url', 'https://msg.text-ware.com/send_sms.php');
+        config()->set('sms.api_url', 'https://textware.lk/send_sms.php');
 
         $provider = new TextWareProvider;
         $result = $provider->send('94771234567', 'Test message');
