@@ -111,6 +111,15 @@ async function handleDuplicate() {
               </div>
               <div class="flex items-center gap-3">
                 <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
+                  <MessageSquare class="h-4 w-4 text-primary" />
+                </div>
+                <div>
+                  <p class="text-xs text-muted">Encoding</p>
+                  <p class="text-sm font-medium text-foreground">{{ template.sms_encoding }}</p>
+                </div>
+              </div>
+              <div class="flex items-center gap-3">
+                <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
                   <User class="h-4 w-4 text-primary" />
                 </div>
                 <div>

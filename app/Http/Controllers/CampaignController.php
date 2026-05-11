@@ -82,7 +82,7 @@ class CampaignController extends Controller
             'message_body' => $request->message_body,
             'sender_id' => $request->sender_id,
             'target_type' => $request->target_type,
-            'target_filters' => $request->target_filters ?? $request->input('target_config'),
+            'target_filters' => $request->target_filters,
             'template_id' => $request->template_id,
             'notes' => $request->notes,
             'status' => $request->status ?? 'draft',
@@ -161,6 +161,8 @@ class CampaignController extends Controller
             'sender_id' => $request->sender_id,
             'target_type' => $request->target_type,
             'target_filters' => $request->target_filters,
+            'template_id' => $request->template_id,
+            'notes' => $request->notes,
             'scheduled_at' => $request->scheduled_at,
         ]);
 

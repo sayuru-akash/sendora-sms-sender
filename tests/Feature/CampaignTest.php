@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Contact;
+use App\Models\ListModel;
 use App\Models\SmsCampaign;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -37,6 +38,50 @@ class CampaignTest extends TestCase
             'name' => 'Test Campaign',
             'status' => 'draft',
         ]);
+    }
+
+    public function test_can_create_long_multi_segment_campaign_message(): void
+    {
+        $response = $this->actingAs($this->staff)->postJson('/campaigns', [
+            'name' => 'Long Payment Reminder',
+            'message_body' => str_repeat('Payment reminder. ', 120),
+            'target_type' => 'all_contacts',
+        ]);
+
+        $response->assertCreated();
+        $this->assertDatabaseHas('sms_campaigns', [
+            'name' => 'Long Payment Reminder',
+        ]);
+    }
+
+    public function test_list_campaign_accepts_flat_list_ids_from_quick_form(): void
+    {
+        $list = ListModel::factory()->create();
+
+        $response = $this->actingAs($this->staff)->postJson('/campaigns', [
+            'name' => 'List Campaign',
+            'message_body' => 'Hello list!',
+            'target_type' => 'list',
+            'list_ids' => [$list->id],
+        ]);
+
+        $response->assertCreated();
+
+        $campaign = SmsCampaign::where('name', 'List Campaign')->firstOrFail();
+
+        $this->assertSame(['list_ids' => [$list->id], 'tag_ids' => [], 'contact_ids' => []], $campaign->target_filters);
+    }
+
+    public function test_list_campaign_requires_at_least_one_selected_list(): void
+    {
+        $response = $this->actingAs($this->staff)->postJson('/campaigns', [
+            'name' => 'Empty List Campaign',
+            'message_body' => 'Hello list!',
+            'target_type' => 'list',
+            'list_ids' => [],
+        ]);
+
+        $response->assertJsonValidationErrors('target_filters.list_ids');
     }
 
     public function test_campaign_excludes_unsubscribed(): void

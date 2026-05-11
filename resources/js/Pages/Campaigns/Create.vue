@@ -62,7 +62,20 @@ function selectTemplate(templateId: string | number) {
 }
 
 function submit() {
-  form.post(route('campaigns.store'));
+  form.transform((data) => ({
+    name: data.name,
+    sender_id: data.sender_id,
+    message_body: data.message_body,
+    target_type: data.target_type,
+    target_filters: {
+      list_ids: data.target_type === 'list' ? data.list_ids : undefined,
+      tag_ids: data.target_type === 'tag' ? data.tag_ids : undefined,
+    },
+    template_id: data.template_id,
+    notes: data.notes,
+    scheduled_at: data.scheduled_at || undefined,
+    status: data.scheduled_at ? 'scheduled' : 'draft',
+  })).post(route('campaigns.store'));
 }
 </script>
 

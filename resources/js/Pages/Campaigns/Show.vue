@@ -3,6 +3,7 @@ import AppLayout from '@/Components/layout/AppLayout.vue';
 import PageHeader from '@/Components/common/PageHeader.vue';
 import StatusBadge from '@/Components/common/StatusBadge.vue';
 import CampaignProgress from '@/Components/common/CampaignProgress.vue';
+import CharacterCounter from '@/Components/common/CharacterCounter.vue';
 import StatCard from '@/Components/common/StatCard.vue';
 import Card from '@/Components/ui/Card.vue';
 import CardContent from '@/Components/ui/CardContent.vue';
@@ -137,9 +138,10 @@ const stats = [
           <CardTitle>Message</CardTitle>
         </CardHeader>
         <CardContent>
-          <div class="rounded-lg border border-border bg-gray-50 p-4">
+          <div class="rounded-lg border border-border bg-gray-50 p-4 mb-3">
             <p class="text-sm text-foreground whitespace-pre-wrap">{{ campaign.message_body }}</p>
           </div>
+          <CharacterCounter :text="campaign.message_body" />
         </CardContent>
       </Card>
     </div>

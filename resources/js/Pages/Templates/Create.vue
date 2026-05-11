@@ -26,7 +26,6 @@ const form = useForm({
 const categoryOptions = TEMPLATE_CATEGORIES.map((c) => ({ label: c, value: c }));
 const statusOptions = [
   { label: 'Active', value: 'active' },
-  { label: 'Draft', value: 'draft' },
   { label: 'Inactive', value: 'inactive' },
 ];
 

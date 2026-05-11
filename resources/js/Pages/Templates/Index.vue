@@ -127,6 +127,8 @@ function duplicateTemplate(template: Template) {
             <span>·</span>
             <span>{{ template.sms_segments }} segment{{ template.sms_segments !== 1 ? 's' : '' }}</span>
             <span>·</span>
+            <span>{{ template.sms_encoding }}</span>
+            <span>·</span>
             <span>Used {{ formatNumber(template.usage_count) }}x</span>
           </div>
         </CardContent>

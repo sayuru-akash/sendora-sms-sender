@@ -78,14 +78,18 @@ class PrepareCampaignRecipients implements ShouldQueue
 
             case 'list':
                 $listIds = $this->campaign->target_filters['list_ids'] ?? [];
-                if (! empty($listIds)) {
+                if (empty($listIds)) {
+                    $query->whereRaw('1 = 0');
+                } else {
                     $query->whereHas('lists', fn ($q) => $q->whereIn('lists.id', $listIds));
                 }
                 break;
 
             case 'tag':
                 $tagIds = $this->campaign->target_filters['tag_ids'] ?? [];
-                if (! empty($tagIds)) {
+                if (empty($tagIds)) {
+                    $query->whereRaw('1 = 0');
+                } else {
                     $query->whereHas('tags', fn ($q) => $q->whereIn('tags.id', $tagIds));
                 }
                 break;
@@ -102,7 +106,9 @@ class PrepareCampaignRecipients implements ShouldQueue
 
             case 'manual_selection':
                 $contactIds = $this->campaign->target_filters['contact_ids'] ?? [];
-                if (! empty($contactIds)) {
+                if (empty($contactIds)) {
+                    $query->whereRaw('1 = 0');
+                } else {
                     $query->whereIn('id', $contactIds);
                 }
                 break;

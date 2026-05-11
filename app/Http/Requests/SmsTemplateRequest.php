@@ -17,7 +17,7 @@ class SmsTemplateRequest extends FormRequest
         return [
             'name' => ['required', 'string', 'max:255'],
             'category' => ['nullable', 'string', 'max:255'],
-            'body' => ['required', 'string', 'max:1600'],
+            'body' => ['required', 'string', 'max:'.config('sms.max_message_characters', 10000)],
             'variables' => ['nullable', 'array'],
             'variables.*' => ['string', 'max:100'],
             'status' => ['nullable', Rule::in(['active', 'inactive'])],

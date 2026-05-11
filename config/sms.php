@@ -53,4 +53,15 @@ return [
     |
     */
     'timeout_seconds' => (int) env('SMS_TIMEOUT_SECONDS', 30),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Message Safety Limit
+    |--------------------------------------------------------------------------
+    |
+    | This is an application-level guardrail for accidental huge submissions.
+    | Normal long SMS messages are sent as multiple billable segments.
+    |
+    */
+    'max_message_characters' => (int) env('SMS_MAX_MESSAGE_CHARACTERS', 10000),
 ];

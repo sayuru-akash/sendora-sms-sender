@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\SmsText;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -193,15 +194,7 @@ class SmsCampaign extends Model
 
     public function getSmsSegmentEstimateAttribute(): int
     {
-        $length = mb_strlen($this->message_body);
-        if ($length <= 160) {
-            return 1;
-        }
-        if ($length <= 306) {
-            return 2;
-        }
-
-        return (int) ceil($length / 153);
+        return SmsText::metrics($this->message_body)['sms_segments'];
     }
 
     // Scopes

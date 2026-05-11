@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\SmsText;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -21,7 +22,7 @@ class SmsTemplate extends Model
         'created_by',
     ];
 
-    protected $appends = ['character_count', 'sms_segments', 'usage_count', 'created_by_name'];
+    protected $appends = ['character_count', 'sms_segments', 'sms_encoding', 'usage_count', 'created_by_name'];
 
     protected function casts(): array
     {
@@ -43,20 +44,17 @@ class SmsTemplate extends Model
 
     public function getCharacterCountAttribute(): int
     {
-        return mb_strlen($this->body);
+        return SmsText::metrics($this->body)['character_count'];
     }
 
     public function getSmsSegmentsAttribute(): int
     {
-        $length = $this->character_count;
-        if ($length <= 160) {
-            return 1;
-        }
-        if ($length <= 306) {
-            return 2;
-        }
+        return SmsText::metrics($this->body)['sms_segments'];
+    }
 
-        return (int) ceil($length / 153);
+    public function getSmsEncodingAttribute(): string
+    {
+        return SmsText::metrics($this->body)['encoding'];
     }
 
     public function getUsageCountAttribute(): int
