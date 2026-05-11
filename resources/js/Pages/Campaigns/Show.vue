@@ -13,15 +13,16 @@ import CardTitle from '@/Components/ui/CardTitle.vue';
 import Button from '@/Components/ui/Button.vue';
 import Badge from '@/Components/ui/Badge.vue';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { Send, CheckCircle, XCircle, SkipForward, Clock, Pause, Play, XCircleIcon, BarChart3, RotateCcw } from 'lucide-vue-next';
+import { Send, CheckCircle, XCircle, Clock, Pause, Play, XCircleIcon, BarChart3, RotateCcw, History } from 'lucide-vue-next';
 import type { Campaign, CampaignRecipient } from '@/types/campaign';
-import type { Pagination } from '@/types';
-import { formatDate, formatDateTime, formatNumber } from '@/lib/utils';
+import type { ActivityLog, Pagination } from '@/types';
+import { formatDateTime, formatRelativeTime, formatNumber, truncate } from '@/lib/utils';
 import { useConfirm } from '@/composables/useConfirm';
 
 const props = defineProps<{
   campaign: Campaign;
   recipients: { data: CampaignRecipient[]; meta: Pagination };
+  recent_activities: ActivityLog[];
 }>();
 
 const { confirm } = useConfirm();
@@ -30,6 +31,10 @@ const retryingRecipientId = ref<number | null>(null);
 let refreshTimer: number | undefined;
 
 const canResendFailed = computed(() => ['completed', 'failed'].includes(props.campaign.status) && props.campaign.failed_count > 0);
+const activityLogUrl = computed(() => route('activity-logs.index', {
+  subject_type: 'App\\Models\\SmsCampaign',
+  subject_id: props.campaign.id,
+}));
 
 function pauseCampaign() {
   router.post(route('campaigns.pause', props.campaign.id));
@@ -131,6 +136,12 @@ onBeforeUnmount(() => {
             Report
           </Button>
         </Link>
+        <Link :href="activityLogUrl">
+          <Button variant="outline">
+            <History class="h-4 w-4" />
+            Activity
+          </Button>
+        </Link>
         <Button v-if="campaign.status === 'draft'" @click="sendCampaign">
           <Send class="h-4 w-4" />
           Send
@@ -219,6 +230,42 @@ onBeforeUnmount(() => {
         </CardContent>
       </Card>
     </div>
+
+    <Card class="mt-6">
+      <CardHeader class="flex flex-row items-center justify-between gap-3">
+        <CardTitle>Activity</CardTitle>
+        <Link :href="activityLogUrl">
+          <Button size="sm" variant="outline">
+            <History class="h-3.5 w-3.5" />
+            View All
+          </Button>
+        </Link>
+      </CardHeader>
+      <CardContent>
+        <div v-if="recent_activities.length === 0" class="rounded-lg border border-dashed border-border px-4 py-6 text-center text-sm text-muted">
+          No activity recorded for this campaign yet.
+        </div>
+        <div v-else class="divide-y divide-border">
+          <div
+            v-for="activity in recent_activities"
+            :key="activity.id"
+            class="flex items-start justify-between gap-4 py-3 first:pt-0 last:pb-0"
+          >
+            <div class="min-w-0">
+              <p class="text-sm font-medium text-foreground">{{ activity.description }}</p>
+              <p class="mt-1 text-xs text-muted">
+                {{ truncate(activity.event, 24) }}
+                <span v-if="activity.causer_name"> · {{ activity.causer_name }}</span>
+              </p>
+            </div>
+            <div class="shrink-0 text-right">
+              <p class="text-xs text-muted whitespace-nowrap">{{ formatRelativeTime(activity.created_at) }}</p>
+              <p class="mt-1 text-[11px] text-muted-foreground whitespace-nowrap">{{ formatDateTime(activity.created_at) }}</p>
+            </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
 
     <!-- Recipients Table -->
     <Card class="mt-6">

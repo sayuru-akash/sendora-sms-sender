@@ -142,6 +142,46 @@ class ActivityLogger
             ->log('Campaign sent');
     }
 
+    public function logCampaignQueued(SmsCampaign $campaign): Activity
+    {
+        return activity()
+            ->performedOn($campaign)
+            ->causedBy(auth()->user() ?? $campaign->creator)
+            ->event('queued')
+            ->withProperties($this->campaignStatusProperties($campaign))
+            ->log('Campaign queued');
+    }
+
+    public function logCampaignSending(SmsCampaign $campaign): Activity
+    {
+        return activity()
+            ->performedOn($campaign)
+            ->causedBy(auth()->user() ?? $campaign->creator)
+            ->event('sending')
+            ->withProperties($this->campaignStatusProperties($campaign))
+            ->log('Campaign sending started');
+    }
+
+    public function logCampaignCompleted(SmsCampaign $campaign): Activity
+    {
+        return activity()
+            ->performedOn($campaign)
+            ->causedBy(auth()->user() ?? $campaign->creator)
+            ->event('completed')
+            ->withProperties($this->campaignStatusProperties($campaign))
+            ->log('Campaign completed');
+    }
+
+    public function logCampaignFailed(SmsCampaign $campaign): Activity
+    {
+        return activity()
+            ->performedOn($campaign)
+            ->causedBy(auth()->user() ?? $campaign->creator)
+            ->event('failed')
+            ->withProperties($this->campaignStatusProperties($campaign))
+            ->log('Campaign failed');
+    }
+
     public function logCampaignResendQueued(SmsCampaign $campaign, int $recipientCount, ?CampaignRecipient $recipient = null): Activity
     {
         return activity()
@@ -175,6 +215,16 @@ class ActivityLogger
                 'pending_count' => $campaign->pending_count,
             ])
             ->log('Campaign paused');
+    }
+
+    public function logCampaignResumed(SmsCampaign $campaign): Activity
+    {
+        return activity()
+            ->performedOn($campaign)
+            ->causedBy(auth()->user())
+            ->event('resumed')
+            ->withProperties($this->campaignStatusProperties($campaign))
+            ->log('Campaign resumed');
     }
 
     /**
@@ -221,5 +271,24 @@ class ActivityLogger
                 'success' => $success,
             ])
             ->log($success ? 'Test SMS sent successfully' : 'Test SMS failed');
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function campaignStatusProperties(SmsCampaign $campaign): array
+    {
+        return [
+            'name' => $campaign->name,
+            'status' => $campaign->status,
+            'total_recipients' => $campaign->total_recipients,
+            'pending_count' => $campaign->pending_count,
+            'queued_count' => $campaign->queued_count,
+            'sent_count' => $campaign->sent_count,
+            'failed_count' => $campaign->failed_count,
+            'skipped_count' => $campaign->skipped_count,
+            'logged_at' => now()->toIso8601String(),
+            'timezone' => config('app.timezone'),
+        ];
     }
 }

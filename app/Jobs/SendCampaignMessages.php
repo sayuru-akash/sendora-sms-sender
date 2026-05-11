@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Models\CampaignRecipient;
 use App\Models\SmsCampaign;
+use App\Services\ActivityLogger;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -16,24 +17,27 @@ class SendCampaignMessages implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $tries = 1;
+
     public int $timeout = 7200; // 2 hours
 
     public function __construct(
         public SmsCampaign $campaign,
     ) {}
 
-    public function handle(): void
+    public function handle(ActivityLogger $activityLogger): void
     {
         // Refresh campaign status
         $this->campaign->refresh();
 
         if ($this->campaign->isCancelled()) {
             Log::info('Campaign cancelled, stopping send', ['campaign_id' => $this->campaign->id]);
+
             return;
         }
 
         // Mark as sending
         $this->campaign->markSending();
+        $activityLogger->logCampaignSending($this->campaign->fresh());
 
         $rateLimit = config('sms.rate_limit_per_minute', 300);
         $batchSize = min(50, $rateLimit);
@@ -51,11 +55,13 @@ class SendCampaignMessages implements ShouldQueue
 
             if ($this->campaign->isPaused()) {
                 Log::info('Campaign paused, stopping send', ['campaign_id' => $this->campaign->id]);
+
                 return false; // Stop chunking
             }
 
             if ($this->campaign->isCancelled()) {
                 Log::info('Campaign cancelled, stopping send', ['campaign_id' => $this->campaign->id]);
+
                 return false; // Stop chunking
             }
 

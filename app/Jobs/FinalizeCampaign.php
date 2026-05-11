@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Models\CampaignRecipient;
 use App\Models\SmsCampaign;
+use App\Services\ActivityLogger;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -16,13 +17,14 @@ class FinalizeCampaign implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $tries = 5;
+
     public int $timeout = 300; // 5 minutes
 
     public function __construct(
         public SmsCampaign $campaign,
     ) {}
 
-    public function handle(): void
+    public function handle(ActivityLogger $activityLogger): void
     {
         $this->campaign->refresh();
 
@@ -31,6 +33,7 @@ class FinalizeCampaign implements ShouldQueue
             Log::info('Campaign was cancelled, finalizing as cancelled', [
                 'campaign_id' => $this->campaign->id,
             ]);
+
             return;
         }
 
@@ -48,6 +51,7 @@ class FinalizeCampaign implements ShouldQueue
             ]);
 
             self::dispatch($this->campaign)->delay(now()->addMinutes(1));
+
             return;
         }
 
@@ -86,5 +90,11 @@ class FinalizeCampaign implements ShouldQueue
             'sent' => $sentCount,
             'failed' => $failedCount,
         ]);
+
+        if ($this->campaign->isCompleted()) {
+            $activityLogger->logCampaignCompleted($this->campaign->fresh());
+        } else {
+            $activityLogger->logCampaignFailed($this->campaign->fresh());
+        }
     }
 }

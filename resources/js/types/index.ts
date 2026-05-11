@@ -146,6 +146,8 @@ export interface ActivityLog {
     description: string;
     subject_type: string;
     subject_id: number;
+    subject_name: string | null;
+    subject_url: string | null;
     causer_id: number | null;
     causer_name: string | null;
     properties: Record<string, unknown>;

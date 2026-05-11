@@ -5,10 +5,11 @@ import PageHeader from '@/Components/common/PageHeader.vue';
 import SearchInput from '@/Components/common/SearchInput.vue';
 import Pagination from '@/Components/common/Pagination.vue';
 import Card from '@/Components/ui/Card.vue';
+import Button from '@/Components/ui/Button.vue';
 import Badge from '@/Components/ui/Badge.vue';
 import Select from '@/Components/ui/Select.vue';
-import { Head, router } from '@inertiajs/vue3';
-import { Activity, Clock } from 'lucide-vue-next';
+import { Head, Link, router } from '@inertiajs/vue3';
+import { Activity, Clock, Eye } from 'lucide-vue-next';
 import type { ActivityLog, Pagination as PaginationType } from '@/types';
 import { formatDateTime, formatRelativeTime, truncate } from '@/lib/utils';
 
@@ -30,7 +31,13 @@ const eventOptions = [
   { label: 'Deleted', value: 'deleted' },
   { label: 'Restored', value: 'restored' },
   { label: 'Sent', value: 'sent' },
+  { label: 'Queued', value: 'queued' },
+  { label: 'Sending', value: 'sending' },
+  { label: 'Completed', value: 'completed' },
   { label: 'Resend Queued', value: 'resend_queued' },
+  { label: 'Paused', value: 'paused' },
+  { label: 'Resumed', value: 'resumed' },
+  { label: 'Cancelled', value: 'cancelled' },
   { label: 'Failed', value: 'failed' },
   { label: 'Imported', value: 'imported' },
   { label: 'Exported', value: 'exported' },
@@ -42,7 +49,13 @@ const eventBadgeVariant: Record<string, 'default' | 'secondary' | 'success' | 'd
   deleted: 'danger',
   restored: 'warning',
   sent: 'success',
+  queued: 'info',
+  sending: 'warning',
+  completed: 'success',
   resend_queued: 'warning',
+  paused: 'warning',
+  resumed: 'info',
+  cancelled: 'danger',
   failed: 'danger',
   imported: 'info',
   exported: 'secondary',
@@ -67,6 +80,18 @@ function handleSearch(val: string) {
 function handleEventFilter(val: string | number) {
   selectedEvent.value = String(val);
   applyFilters();
+}
+
+function propertyEntries(properties: Record<string, unknown>) {
+  return Object.entries(properties ?? {}).filter(([, value]) => value !== null && value !== undefined && value !== '');
+}
+
+function formatPropertyValue(value: unknown): string {
+  if (Array.isArray(value) || (typeof value === 'object' && value !== null)) {
+    return JSON.stringify(value);
+  }
+
+  return String(value);
 }
 </script>
 
@@ -129,12 +154,35 @@ function handleEventFilter(val: string | number) {
               </span>
               <span v-if="activity.subject_type" class="text-xs text-muted">
                 {{ truncate(activity.subject_type.split('\\').pop() ?? '', 30) }}
+                <span v-if="activity.subject_name"> · {{ truncate(activity.subject_name, 40) }}</span>
               </span>
             </div>
+            <details v-if="propertyEntries(activity.properties).length" class="group mt-3">
+              <summary class="cursor-pointer list-none text-xs font-medium text-primary hover:text-primary-dark">
+                <span class="group-open:hidden">Show details</span>
+                <span class="hidden group-open:inline">Hide details</span>
+              </summary>
+              <dl class="mt-2 grid grid-cols-1 gap-2 rounded-lg border border-border bg-white p-3 sm:grid-cols-2">
+                <div
+                  v-for="[key, value] in propertyEntries(activity.properties)"
+                  :key="key"
+                  class="min-w-0"
+                >
+                  <dt class="text-[11px] uppercase tracking-wide text-muted">{{ key.replaceAll('_', ' ') }}</dt>
+                  <dd class="mt-0.5 break-words text-xs text-foreground">{{ formatPropertyValue(value) }}</dd>
+                </div>
+              </dl>
+            </details>
           </div>
 
           <!-- Timestamp -->
           <div class="shrink-0 text-right">
+            <Link v-if="activity.subject_url" :href="activity.subject_url" class="mb-2 inline-flex">
+              <Button size="sm" variant="outline">
+                <Eye class="h-3.5 w-3.5" />
+                View
+              </Button>
+            </Link>
             <p class="text-xs text-muted whitespace-nowrap">
               {{ formatRelativeTime(activity.created_at) }}
             </p>

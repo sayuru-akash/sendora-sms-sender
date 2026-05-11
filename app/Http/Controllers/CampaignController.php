@@ -27,6 +27,7 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
+use Spatie\Activitylog\Models\Activity;
 
 class CampaignController extends Controller
 {
@@ -245,10 +246,19 @@ class CampaignController extends Controller
             ], $result['data']),
             'meta' => $result['meta'],
         ];
+        $recentActivities = Activity::with('causer')
+            ->where('subject_type', SmsCampaign::class)
+            ->where('subject_id', $campaign->id)
+            ->latest('id')
+            ->limit(6)
+            ->get()
+            ->map(fn (Activity $activity): array => ActivityLogController::formatActivity($activity))
+            ->all();
 
         return Inertia::render('Campaigns/Show', [
             'campaign' => $campaign,
             'recipients' => $recipients,
+            'recent_activities' => $recentActivities,
         ]);
     }
 
@@ -418,6 +428,7 @@ class CampaignController extends Controller
     protected function dispatchCampaignSend(SmsCampaign $campaign): void
     {
         $campaign->markQueued();
+        $this->activityLogger->logCampaignQueued($campaign->fresh());
 
         PrepareCampaignRecipients::dispatch($campaign)
             ->chain([
@@ -503,6 +514,7 @@ class CampaignController extends Controller
         }
 
         $campaign->markSending();
+        $this->activityLogger->logCampaignResumed($campaign->fresh());
 
         // Re-dispatch sending
         SendCampaignMessages::dispatch($campaign);
