@@ -127,6 +127,26 @@ class UserManagementTest extends TestCase
                 ->where('filters.status', 'active')
                 ->where('users.meta.per_page', 10)
                 ->where('users.meta.total', 3)
+                ->where('filterOptions.roles', ['owner', 'admin', 'manager', 'staff', 'viewer'])
+                ->where('filterOptions.statuses', ['active', 'inactive', 'suspended'])
+                ->where('filterOptions.perPage', [10, 25, 50, 100])
+            );
+    }
+
+    public function test_users_index_normalizes_invalid_filter_values(): void
+    {
+        $owner = User::factory()->owner()->create();
+        User::factory()->staff()->count(3)->create(['status' => 'active']);
+
+        $this->actingAs($owner)
+            ->get('/users?role=invalid&status=unknown&per_page=999')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Users/Index')
+                ->where('filters.role', null)
+                ->where('filters.status', null)
+                ->where('users.meta.per_page', 25)
+                ->where('users.meta.total', 4)
             );
     }
 

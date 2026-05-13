@@ -81,7 +81,7 @@ class ActivityLogController extends Controller
     {
         return [
             'id' => $activity->id,
-            'event' => $activity->event,
+            'event' => $activity->event ?: 'activity',
             'description' => $activity->description,
             'subject_type' => $activity->subject_type,
             'subject_id' => $activity->subject_id,

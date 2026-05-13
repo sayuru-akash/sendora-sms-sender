@@ -9,6 +9,7 @@ use App\Services\ActivityLogger;
 use App\Services\PhoneNormalizer;
 use App\Services\Sms\SmsService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
 use Inertia\Inertia;
@@ -40,7 +41,7 @@ class SettingController extends Controller
         ]);
     }
 
-    public function update(SettingRequest $request): JsonResponse
+    public function update(SettingRequest $request): JsonResponse|RedirectResponse
     {
         $settingsMap = SystemSetting::EDITABLE_SETTINGS;
 
@@ -74,22 +75,31 @@ class SettingController extends Controller
 
         $this->activityLogger->logSettingsChanged('general');
 
-        return response()->json(['message' => 'Settings updated successfully.']);
+        if ($request->wantsJson()) {
+            return response()->json(['message' => 'Settings updated successfully.']);
+        }
+
+        return back()->with('success', 'Settings updated successfully.');
     }
 
     /**
      * Send a test SMS.
      */
-    public function testSms(TestSmsRequest $request, SmsService $smsService, PhoneNormalizer $phoneNormalizer): JsonResponse
+    public function testSms(TestSmsRequest $request, SmsService $smsService, PhoneNormalizer $phoneNormalizer): JsonResponse|RedirectResponse
     {
         // Rate limit: 5 test SMS per minute per user
         $rateLimitKey = 'test-sms:'.$request->user()->id;
 
         if (RateLimiter::tooManyAttempts($rateLimitKey, 5)) {
             $seconds = RateLimiter::availableIn($rateLimitKey);
+            $message = "Too many test SMS attempts. Please try again in {$seconds} seconds.";
+
+            if (! $request->wantsJson()) {
+                return back()->withErrors(['phone' => $message]);
+            }
 
             return response()->json([
-                'message' => "Too many test SMS attempts. Please try again in {$seconds} seconds.",
+                'message' => $message,
             ], 429);
         }
 
@@ -106,9 +116,17 @@ class SettingController extends Controller
             $result->success,
         );
 
+        $message = $result->success ? 'Test SMS sent successfully.' : 'Test SMS failed: '.$result->errorMessage;
+
+        if (! $request->wantsJson()) {
+            return $result->success
+                ? back()->with('success', $message)
+                : back()->withErrors(['phone' => $message]);
+        }
+
         return response()->json([
             'success' => $result->success,
-            'message' => $result->success ? 'Test SMS sent successfully.' : 'Test SMS failed: '.$result->errorMessage,
+            'message' => $message,
         ], $result->success ? 200 : 422);
     }
 }

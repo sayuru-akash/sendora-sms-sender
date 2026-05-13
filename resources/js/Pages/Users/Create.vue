@@ -13,6 +13,7 @@ import { Save } from 'lucide-vue-next';
 import { USER_ROLES } from '@/types/user';
 
 const page = usePage();
+const currentUserRole = computed(() => page.props.auth?.user?.role ?? 'staff');
 const form = useForm({
   name: '',
   email: '',
@@ -23,7 +24,7 @@ const form = useForm({
 });
 
 const roleOptions = computed(() => USER_ROLES
-  .filter((role) => page.props.auth.user.role === 'owner' || !['owner', 'admin'].includes(role.value))
+  .filter((role) => currentUserRole.value === 'owner' || !['owner', 'admin'].includes(role.value))
   .map((role) => ({ label: role.label, value: role.value })));
 const statusOptions = [
   { label: 'Active', value: 'active' },

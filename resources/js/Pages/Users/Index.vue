@@ -21,30 +21,45 @@ import { formatRelativeTime } from '@/lib/utils';
 import { useConfirm } from '@/composables/useConfirm';
 
 const props = defineProps<{
-  users: { data: User[]; meta: PaginationType };
-  filters: {
+  users?: { data: User[]; meta: PaginationType };
+  filters?: {
     search?: string;
     role?: string;
     status?: string;
     per_page?: string | number;
   };
-  filterOptions: {
-    roles: string[];
-    statuses: string[];
-    perPage: number[];
+  filterOptions?: {
+    roles?: string[];
+    statuses?: string[];
+    perPage?: number[];
   };
 }>();
 
 const { confirm } = useConfirm();
-const search = ref(props.filters.search ?? '');
-const selectedRole = ref(props.filters.role ?? '');
-const selectedStatus = ref(props.filters.status ?? '');
-const selectedPerPage = ref(props.filters.per_page ? String(props.filters.per_page) : String(props.users.meta.per_page ?? 25));
+const emptyMeta: PaginationType = {
+  current_page: 1,
+  last_page: 1,
+  per_page: 25,
+  total: 0,
+  from: null,
+  to: null,
+};
+const safeUsers = computed(() => props.users ?? { data: [], meta: emptyMeta });
+const safeFilters = computed(() => props.filters ?? {});
+const safeFilterOptions = computed(() => ({
+  roles: props.filterOptions?.roles ?? ['owner', 'admin', 'manager', 'staff', 'viewer'],
+  statuses: props.filterOptions?.statuses ?? ['active', 'inactive', 'suspended'],
+  perPage: props.filterOptions?.perPage ?? [10, 25, 50, 100],
+}));
+const search = ref(safeFilters.value.search ?? '');
+const selectedRole = ref(safeFilters.value.role ?? '');
+const selectedStatus = ref(safeFilters.value.status ?? '');
+const selectedPerPage = ref(safeFilters.value.per_page ? String(safeFilters.value.per_page) : String(safeUsers.value.meta.per_page ?? 25));
 const hasFilters = computed(() => Boolean(search.value || selectedRole.value || selectedStatus.value));
 
 const roleOptions = computed(() => [
   { label: 'All roles', value: '' },
-  ...props.filterOptions.roles.map((role) => ({
+  ...safeFilterOptions.value.roles.map((role) => ({
     label: USER_ROLES.find((item) => item.value === role)?.label ?? role,
     value: role,
   })),
@@ -52,10 +67,10 @@ const roleOptions = computed(() => [
 
 const statusOptions = computed(() => [
   { label: 'All statuses', value: '' },
-  ...props.filterOptions.statuses.map((status) => ({ label: status.charAt(0).toUpperCase() + status.slice(1), value: status })),
+  ...safeFilterOptions.value.statuses.map((status) => ({ label: status.charAt(0).toUpperCase() + status.slice(1), value: status })),
 ]);
 
-const perPageOptions = computed(() => props.filterOptions.perPage.map((value) => ({ label: `${value} / page`, value: String(value) })));
+const perPageOptions = computed(() => safeFilterOptions.value.perPage.map((value) => ({ label: `${value} / page`, value: String(value) })));
 
 function applyFilters(overrides: Record<string, string | number | undefined> = {}) {
   router.get(
@@ -100,7 +115,7 @@ async function deleteUser(user: User) {
     { label: 'Settings', href: route('settings.index') },
     { label: 'Users' },
   ]">
-    <PageHeader title="Users" :subtitle="`${users.meta.total} users`">
+    <PageHeader title="Users" :subtitle="`${safeUsers.meta.total} users`">
       <template #actions>
         <Link :href="route('users.create')">
           <Button>
@@ -146,7 +161,7 @@ async function deleteUser(user: User) {
       </Button>
     </div>
 
-    <div v-if="users.data.length === 0" class="rounded-xl border border-border bg-white py-12">
+    <div v-if="safeUsers.data.length === 0" class="rounded-xl border border-border bg-white py-12">
       <EmptyState
         :icon="UserCog"
         :title="hasFilters ? 'No users found' : 'No users yet'"
@@ -168,7 +183,7 @@ async function deleteUser(user: User) {
           </thead>
           <tbody>
             <tr
-              v-for="user in users.data"
+              v-for="user in safeUsers.data"
               :key="user.id"
               class="border-b border-border transition-colors hover:bg-gray-50/50"
             >
@@ -214,6 +229,6 @@ async function deleteUser(user: User) {
       </div>
     </div>
 
-    <Pagination :meta="users.meta" />
+    <Pagination :meta="safeUsers.meta" />
   </AppLayout>
 </template>

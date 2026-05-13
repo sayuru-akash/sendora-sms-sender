@@ -226,6 +226,50 @@ class ImportTest extends TestCase
         Queue::assertNothingPushed();
     }
 
+    public function test_import_show_json_uses_same_ui_safe_shape(): void
+    {
+        $list = ListModel::factory()->create(['name' => 'CCB - 26.1']);
+        $tag = Tag::factory()->create(['name' => 'Imported 2026-05-07']);
+        $import = Import::factory()->create([
+            'created_by' => $this->user->id,
+            'type' => 'xlsx',
+            'status' => 'processing',
+            'total_rows' => 10,
+            'processed_rows' => 4,
+            'successful_rows' => 3,
+            'failed_rows' => 1,
+            'duplicate_rows' => 0,
+            'invalid_rows' => 1,
+            'column_mapping' => ['Mobile' => 'phone', 'Name' => 'full_name'],
+            'options' => [
+                'duplicate_handling' => 'add_to_list',
+                'list_ids' => [$list->id],
+                'tag_ids' => [$tag->id],
+            ],
+        ]);
+        ImportRow::create([
+            'import_id' => $import->id,
+            'row_number' => 2,
+            'raw_data' => ['Name' => 'Student One', 'Mobile' => '0712345678'],
+            'status' => 'failed',
+            'error_message' => 'Invalid phone',
+        ]);
+
+        $this->actingAs($this->user)
+            ->getJson(route('imports.show', $import))
+            ->assertOk()
+            ->assertJsonPath('import.file_type', 'xlsx')
+            ->assertJsonPath('import.progress', 40)
+            ->assertJsonPath('import.duplicate_handling', 'add_to_list')
+            ->assertJsonPath('import.list_ids', [$list->id])
+            ->assertJsonPath('import.tag_ids', [$tag->id])
+            ->assertJsonPath('import.lists.0.name', 'CCB - 26.1')
+            ->assertJsonPath('import.tags.0.name', 'Imported 2026-05-07')
+            ->assertJsonPath('import.phone_column', 'Mobile')
+            ->assertJsonPath('import.failed_rows_data.0.error', 'Invalid phone')
+            ->assertJsonPath('import.created_by_name', $this->user->name);
+    }
+
     public function test_xlsx_preview_and_confirm_create_import_rows(): void
     {
         Queue::fake();

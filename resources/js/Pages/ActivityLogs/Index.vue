@@ -21,8 +21,8 @@ type ActivityCauser = {
 };
 
 const props = defineProps<{
-  activities: { data: ActivityLog[]; meta: PaginationType };
-  filters: {
+  activities?: { data: ActivityLog[]; meta: PaginationType };
+  filters?: {
     search?: string;
     event?: string;
     log_name?: string;
@@ -31,21 +31,38 @@ const props = defineProps<{
     subject_id?: string | number;
     per_page?: string | number;
   };
-  filterOptions: {
-    events: string[];
-    logNames: string[];
-    subjectTypes: string[];
-    causers: ActivityCauser[];
-    perPage: number[];
+  filterOptions?: {
+    events?: string[];
+    logNames?: string[];
+    subjectTypes?: string[];
+    causers?: ActivityCauser[];
+    perPage?: number[];
   };
 }>();
 
-const search = ref(props.filters.search ?? '');
-const selectedEvent = ref(props.filters.event ?? '');
-const selectedLogName = ref(props.filters.log_name ?? '');
-const selectedSubjectType = ref(props.filters.subject_type ?? '');
-const selectedCauserId = ref(props.filters.causer_id ? String(props.filters.causer_id) : '');
-const selectedPerPage = ref(props.filters.per_page ? String(props.filters.per_page) : String(props.activities.meta.per_page ?? 25));
+const emptyMeta: PaginationType = {
+  current_page: 1,
+  last_page: 1,
+  per_page: 25,
+  total: 0,
+  from: null,
+  to: null,
+};
+const safeActivities = computed(() => props.activities ?? { data: [], meta: emptyMeta });
+const safeFilters = computed(() => props.filters ?? {});
+const safeFilterOptions = computed(() => ({
+  events: props.filterOptions?.events ?? [],
+  logNames: props.filterOptions?.logNames ?? [],
+  subjectTypes: props.filterOptions?.subjectTypes ?? [],
+  causers: props.filterOptions?.causers ?? [],
+  perPage: props.filterOptions?.perPage ?? [10, 25, 50, 100],
+}));
+const search = ref(safeFilters.value.search ?? '');
+const selectedEvent = ref(safeFilters.value.event ?? '');
+const selectedLogName = ref(safeFilters.value.log_name ?? '');
+const selectedSubjectType = ref(safeFilters.value.subject_type ?? '');
+const selectedCauserId = ref(safeFilters.value.causer_id ? String(safeFilters.value.causer_id) : '');
+const selectedPerPage = ref(safeFilters.value.per_page ? String(safeFilters.value.per_page) : String(safeActivities.value.meta.per_page ?? 25));
 const openActivityId = ref<number | null>(null);
 const detailsOpen = computed({
   get: () => openActivityId.value !== null,
@@ -55,48 +72,48 @@ const detailsOpen = computed({
     }
   },
 });
-const selectedActivity = computed(() => props.activities.data.find((activity) => activity.id === openActivityId.value) ?? null);
-const hasScopedFilters = computed(() => Boolean(props.filters.subject_type || props.filters.subject_id || props.filters.causer_id || props.filters.log_name));
+const selectedActivity = computed(() => safeActivities.value.data.find((activity) => activity.id === openActivityId.value) ?? null);
+const hasScopedFilters = computed(() => Boolean(safeFilters.value.subject_type || safeFilters.value.subject_id || safeFilters.value.causer_id || safeFilters.value.log_name));
 const hasAnyFilters = computed(() => Boolean(search.value || selectedEvent.value || selectedLogName.value || selectedSubjectType.value || selectedCauserId.value || hasScopedFilters.value));
 
 const eventOptions = computed(() => [
   { label: 'All Events', value: '' },
-  ...props.filterOptions.events.map((event) => ({ label: formatEventLabel(event), value: event })),
+  ...safeFilterOptions.value.events.map((event) => ({ label: formatEventLabel(event), value: event })),
 ]);
 
 const logNameOptions = computed(() => [
   { label: 'All Logs', value: '' },
-  ...props.filterOptions.logNames.map((logName) => ({ label: formatEventLabel(logName), value: logName })),
+  ...safeFilterOptions.value.logNames.map((logName) => ({ label: formatEventLabel(logName), value: logName })),
 ]);
 
 const subjectTypeOptions = computed(() => [
   { label: 'All Records', value: '' },
-  ...props.filterOptions.subjectTypes.map((subjectType) => ({ label: subjectTypeLabel(subjectType), value: subjectType })),
+  ...safeFilterOptions.value.subjectTypes.map((subjectType) => ({ label: subjectTypeLabel(subjectType), value: subjectType })),
 ]);
 
 const causerOptions = computed(() => [
   { label: 'All Actors', value: '' },
-  ...props.filterOptions.causers.map((causer) => ({ label: `${causer.name} · ${causer.email}`, value: String(causer.id) })),
+  ...safeFilterOptions.value.causers.map((causer) => ({ label: `${causer.name} · ${causer.email}`, value: String(causer.id) })),
 ]);
 
-const perPageOptions = computed(() => props.filterOptions.perPage.map((value) => ({ label: `${value} / page`, value: String(value) })));
+const perPageOptions = computed(() => safeFilterOptions.value.perPage.map((value) => ({ label: `${value} / page`, value: String(value) })));
 
 const scopedFilterChips = computed(() => {
   const chips: { key: string; label: string; value: string }[] = [];
 
-  if (props.filters.log_name) {
-    chips.push({ key: 'log_name', label: 'Log', value: formatEventLabel(String(props.filters.log_name)) });
+  if (safeFilters.value.log_name) {
+    chips.push({ key: 'log_name', label: 'Log', value: formatEventLabel(String(safeFilters.value.log_name)) });
   }
 
-  if (props.filters.causer_id) {
-    const causer = props.filterOptions.causers.find((item) => String(item.id) === String(props.filters.causer_id));
-    chips.push({ key: 'causer_id', label: 'Actor', value: causer?.name ?? `User #${props.filters.causer_id}` });
+  if (safeFilters.value.causer_id) {
+    const causer = safeFilterOptions.value.causers.find((item) => String(item.id) === String(safeFilters.value.causer_id));
+    chips.push({ key: 'causer_id', label: 'Actor', value: causer?.name ?? `User #${safeFilters.value.causer_id}` });
   }
 
-  if (props.filters.subject_type) {
-    const value = props.filters.subject_id
-      ? `${subjectTypeLabel(String(props.filters.subject_type))} #${props.filters.subject_id}`
-      : subjectTypeLabel(String(props.filters.subject_type));
+  if (safeFilters.value.subject_type) {
+    const value = safeFilters.value.subject_id
+      ? `${subjectTypeLabel(String(safeFilters.value.subject_type))} #${safeFilters.value.subject_id}`
+      : subjectTypeLabel(String(safeFilters.value.subject_type));
     chips.push({ key: 'subject_type', label: 'Record', value });
   }
 
@@ -139,7 +156,7 @@ function applyFilters(overrides: Record<string, string | number | undefined | nu
       log_name: selectedLogName.value || undefined,
       causer_id: selectedCauserId.value || undefined,
       subject_type: selectedSubjectType.value || undefined,
-      subject_id: props.filters.subject_id || undefined,
+      subject_id: safeFilters.value.subject_id || undefined,
       per_page: selectedPerPage.value || undefined,
       ...overrides,
     }),
@@ -257,7 +274,7 @@ function clearFilters() {
   <AppLayout :breadcrumbs="[{ label: 'Activity Log' }]">
     <PageHeader
       title="Activity Log"
-      :subtitle="`${activities.meta.total} events recorded`"
+      :subtitle="`${safeActivities.meta.total} events recorded`"
     />
 
     <div class="mb-6 space-y-3">
@@ -327,7 +344,7 @@ function clearFilters() {
     </div>
 
     <Card>
-      <div v-if="activities.data.length === 0" class="py-12 text-center">
+      <div v-if="safeActivities.data.length === 0" class="py-12 text-center">
         <div class="flex h-12 w-12 items-center justify-center rounded-full bg-gray-100 mx-auto mb-3">
           <Activity class="h-6 w-6 text-muted-foreground" />
         </div>
@@ -339,7 +356,7 @@ function clearFilters() {
 
       <div v-else class="divide-y divide-border">
         <div
-          v-for="activity in activities.data"
+          v-for="activity in safeActivities.data"
           :key="activity.id"
           class="flex items-start gap-4 px-6 py-4 hover:bg-gray-50/50 transition-colors"
         >
@@ -394,7 +411,7 @@ function clearFilters() {
     </Card>
 
     <!-- Pagination -->
-    <Pagination :meta="activities.meta" />
+    <Pagination :meta="safeActivities.meta" />
 
     <Sheet
       v-model:open="detailsOpen"

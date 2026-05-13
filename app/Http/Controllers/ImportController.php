@@ -239,10 +239,6 @@ class ImportController extends Controller
             ? collect()
             : Tag::whereIn('id', $tagIds)->orderBy('name')->get(['id', 'name', 'colour']);
 
-        if ($request->expectsJson()) {
-            return response()->json(['import' => $import]);
-        }
-
         $failedRowsData = $import->failedRows()
             ->get()
             ->map(fn ($row) => [
@@ -280,6 +276,10 @@ class ImportController extends Controller
             'created_at' => $import->created_at?->toISOString(),
             'updated_at' => $import->updated_at?->toISOString(),
         ];
+
+        if ($request->expectsJson()) {
+            return response()->json(['import' => $importData]);
+        }
 
         return Inertia::render('Imports/Show', [
             'import' => $importData,

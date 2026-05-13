@@ -65,4 +65,22 @@ class SettingsSecurityTest extends TestCase
         $this->assertSame(20, SystemSetting::get('max_import_file_size'));
         $this->assertSame('update', SystemSetting::get('default_duplicate_handling'));
     }
+
+    public function test_inertia_settings_update_redirects_back_with_flash(): void
+    {
+        $owner = User::factory()->owner()->create();
+
+        $this->actingAs($owner)
+            ->from('/settings')
+            ->put('/settings', [
+                'company_name' => 'SITC Campus',
+                'timezone' => 'Asia/Colombo',
+                'date_format' => 'd/m/Y',
+                'default_country_code' => '+94',
+            ])
+            ->assertRedirect('/settings')
+            ->assertSessionHas('success', 'Settings updated successfully.');
+
+        $this->assertSame('SITC Campus', SystemSetting::get('company_name'));
+    }
 }

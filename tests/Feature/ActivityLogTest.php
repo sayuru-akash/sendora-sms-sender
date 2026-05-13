@@ -81,6 +81,24 @@ class ActivityLogTest extends TestCase
             );
     }
 
+    public function test_activity_log_index_falls_back_when_event_is_null(): void
+    {
+        $user = User::factory()->manager()->create();
+
+        activity()
+            ->causedBy($user)
+            ->log('Manual system note');
+
+        $this->actingAs($user)
+            ->get('/activity-logs')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('ActivityLogs/Index')
+                ->where('activities.data.0.event', 'activity')
+                ->where('activities.data.0.description', 'Manual system note')
+            );
+    }
+
     public function test_campaign_show_includes_recent_activity_and_activity_log_link_context(): void
     {
         $user = User::factory()->manager()->create();

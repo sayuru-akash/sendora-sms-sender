@@ -28,12 +28,14 @@ class ReportController extends Controller
             : 0;
 
         // SMS over time (last 12 months)
+        $monthExpression = $this->smsOverTimeMonthExpression();
+        $timestampExpression = $this->smsOverTimeTimestampExpression();
         $smsOverTime = SmsMessage::select(
-            DB::raw("TO_CHAR(sent_at, 'YYYY-MM') as month"),
+            DB::raw("{$monthExpression} as month"),
             DB::raw("SUM(CASE WHEN status = 'sent' THEN 1 ELSE 0 END) as sent"),
             DB::raw("SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed")
         )
-            ->where('sent_at', '>=', now()->subMonths(12))
+            ->whereRaw("{$timestampExpression} >= ?", [now()->subMonths(12)])
             ->groupBy('month')
             ->orderBy('month')
             ->get();
@@ -150,6 +152,20 @@ class ReportController extends Controller
         return DB::connection()->getDriverName() === 'sqlite'
             ? "strftime('%Y-%m-%d %H:00', {$timestamp})"
             : "TO_CHAR({$timestamp}, 'YYYY-MM-DD HH24:00')";
+    }
+
+    protected function smsOverTimeTimestampExpression(): string
+    {
+        return 'COALESCE(sent_at, failed_at, created_at)';
+    }
+
+    protected function smsOverTimeMonthExpression(): string
+    {
+        $timestamp = $this->smsOverTimeTimestampExpression();
+
+        return DB::connection()->getDriverName() === 'sqlite'
+            ? "strftime('%Y-%m', {$timestamp})"
+            : "TO_CHAR({$timestamp}, 'YYYY-MM')";
     }
 
     /**
