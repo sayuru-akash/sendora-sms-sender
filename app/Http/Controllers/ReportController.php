@@ -87,23 +87,53 @@ class ReportController extends Controller
     {
         $campaign->load(['creator']);
 
-        $statusCounts = CampaignRecipient::where('campaign_id', $campaign->id)
+        $rawStatusCounts = CampaignRecipient::where('campaign_id', $campaign->id)
             ->selectRaw('status, COUNT(*) as count')
             ->groupBy('status')
             ->pluck('count', 'status');
 
+        $statusCounts = [
+            'sent' => (int) ($rawStatusCounts['sent'] ?? 0),
+            'failed' => (int) ($rawStatusCounts['failed'] ?? 0),
+            'skipped' => (int) ($rawStatusCounts['skipped'] ?? 0),
+            'pending' => (int) ($rawStatusCounts['pending'] ?? 0) + (int) ($rawStatusCounts['queued'] ?? 0),
+        ];
+
+        $hourExpression = $this->campaignReportHourExpression();
         $hourlyData = SmsMessage::where('campaign_id', $campaign->id)
-            ->whereNotNull('sent_at')
-            ->selectRaw("TO_CHAR(sent_at, 'YYYY-MM-DD HH24:00') as hour, COUNT(*) as count")
+            ->whereIn('status', ['sent', 'delivered', 'failed'])
+            ->selectRaw("{$hourExpression} as hour")
+            ->selectRaw("SUM(CASE WHEN status IN ('sent', 'delivered') THEN 1 ELSE 0 END) as sent")
+            ->selectRaw("SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed")
             ->groupBy('hour')
             ->orderBy('hour')
-            ->get();
+            ->get()
+            ->map(fn ($item) => [
+                'hour' => $item->hour,
+                'count' => (int) $item->sent + (int) $item->failed,
+            ]);
 
         $failedMessages = SmsMessage::where('campaign_id', $campaign->id)
             ->where('status', 'failed')
             ->with('contact')
             ->limit(100)
-            ->get();
+            ->get()
+            ->map(fn (SmsMessage $message): array => [
+                'id' => $message->id,
+                'campaign_id' => $message->campaign_id,
+                'campaign_name' => $campaign->name,
+                'contact_id' => $message->contact_id,
+                'contact_name' => $message->contact?->display_name ?? 'N/A',
+                'contact_phone' => $message->phone_normalised,
+                'message' => $message->message_body,
+                'status' => $message->status,
+                'error_message' => $message->error_message,
+                'sent_at' => $message->sent_at?->toISOString(),
+                'delivered_at' => null,
+                'segments' => 0,
+                'cost' => null,
+                'created_at' => $message->created_at?->toISOString(),
+            ]);
 
         return Inertia::render('Reports/Campaign', [
             'campaign' => $campaign,
@@ -111,6 +141,15 @@ class ReportController extends Controller
             'hourly_data' => $hourlyData,
             'failed_messages' => $failedMessages,
         ]);
+    }
+
+    protected function campaignReportHourExpression(): string
+    {
+        $timestamp = 'COALESCE(sent_at, failed_at, created_at)';
+
+        return DB::connection()->getDriverName() === 'sqlite'
+            ? "strftime('%Y-%m-%d %H:00', {$timestamp})"
+            : "TO_CHAR({$timestamp}, 'YYYY-MM-DD HH24:00')";
     }
 
     /**

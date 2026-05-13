@@ -705,12 +705,20 @@ class CampaignController extends Controller
             ->groupBy('status')
             ->pluck('count', 'status');
 
+        $hourExpression = $this->campaignReportHourExpression();
         $hourlyData = SmsMessage::where('campaign_id', $campaign->id)
-            ->whereNotNull('sent_at')
-            ->selectRaw("TO_CHAR(sent_at, 'YYYY-MM-DD HH24:00') as hour, COUNT(*) as count")
+            ->whereIn('status', ['sent', 'delivered', 'failed'])
+            ->selectRaw("{$hourExpression} as hour")
+            ->selectRaw("SUM(CASE WHEN status IN ('sent', 'delivered') THEN 1 ELSE 0 END) as sent")
+            ->selectRaw("SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed")
             ->groupBy('hour')
             ->orderBy('hour')
-            ->get();
+            ->get()
+            ->map(fn ($item) => [
+                'hour' => $item->hour,
+                'sent' => (int) $item->sent,
+                'failed' => (int) $item->failed,
+            ]);
 
         if ($request->expectsJson()) {
             return response()->json([
@@ -728,9 +736,9 @@ class CampaignController extends Controller
             'pending' => (int) ($statusCounts['pending'] ?? 0) + (int) ($statusCounts['queued'] ?? 0),
             'success_rate' => $campaign->success_rate,
             'timeline' => $hourlyData->map(fn ($item) => [
-                'time' => $item->hour,
-                'sent' => 0,
-                'failed' => 0,
+                'time' => $item['hour'],
+                'sent' => $item['sent'],
+                'failed' => $item['failed'],
             ])->toArray(),
         ];
 
@@ -738,5 +746,14 @@ class CampaignController extends Controller
             'campaign' => $campaign,
             'stats' => $stats,
         ]);
+    }
+
+    protected function campaignReportHourExpression(): string
+    {
+        $timestamp = 'COALESCE(sent_at, failed_at, created_at)';
+
+        return DB::connection()->getDriverName() === 'sqlite'
+            ? "strftime('%Y-%m-%d %H:00', {$timestamp})"
+            : "TO_CHAR({$timestamp}, 'YYYY-MM-DD HH24:00')";
     }
 }

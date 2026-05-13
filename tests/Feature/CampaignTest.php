@@ -10,6 +10,7 @@ use App\Models\CampaignRecipient;
 use App\Models\Contact;
 use App\Models\ListModel;
 use App\Models\SmsCampaign;
+use App\Models\SmsMessage;
 use App\Models\User;
 use App\Services\ActivityLogger;
 use App\Services\Sms\MessagePersonalizer;
@@ -90,6 +91,87 @@ class CampaignTest extends TestCase
                 ->where('summary.sent_count_sum', 10)
                 ->where('summary.failed_count_sum', 2)
                 ->where('summary.status_counts.completed', 1)
+            );
+    }
+
+    public function test_campaign_report_exposes_real_sent_and_failed_timeline_counts(): void
+    {
+        $campaign = SmsCampaign::factory()->completed()->create([
+            'total_recipients' => 2,
+            'sent_count' => 1,
+            'failed_count' => 1,
+            'pending_count' => 0,
+            'queued_count' => 0,
+            'created_by' => $this->manager->id,
+        ]);
+
+        SmsMessage::create([
+            'campaign_id' => $campaign->id,
+            'phone_normalised' => '94770000001',
+            'message_body' => 'Sent message',
+            'provider' => 'textware',
+            'status' => 'sent',
+            'sent_at' => now()->setDate(2026, 5, 13)->setTime(8, 15),
+        ]);
+
+        SmsMessage::create([
+            'campaign_id' => $campaign->id,
+            'phone_normalised' => '94770000002',
+            'message_body' => 'Failed message',
+            'provider' => 'textware',
+            'status' => 'failed',
+            'failed_at' => now()->setDate(2026, 5, 13)->setTime(9, 20),
+            'error_message' => 'Provider rejected message',
+        ]);
+
+        $this->actingAs($this->manager)
+            ->get(route('campaigns.report', $campaign))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Campaigns/Report')
+                ->where('stats.timeline.0.sent', 1)
+                ->where('stats.timeline.0.failed', 0)
+                ->where('stats.timeline.1.sent', 0)
+                ->where('stats.timeline.1.failed', 1)
+            );
+    }
+
+    public function test_reports_campaign_page_flattens_failed_messages_for_the_ui(): void
+    {
+        $campaign = SmsCampaign::factory()->completed()->create([
+            'total_recipients' => 1,
+            'sent_count' => 0,
+            'failed_count' => 1,
+            'pending_count' => 0,
+            'queued_count' => 0,
+            'created_by' => $this->manager->id,
+        ]);
+        $contact = Contact::factory()->create([
+            'full_name' => 'Failed Recipient',
+            'phone_normalised' => '94770000003',
+        ]);
+
+        SmsMessage::create([
+            'campaign_id' => $campaign->id,
+            'contact_id' => $contact->id,
+            'phone_normalised' => $contact->phone_normalised,
+            'message_body' => 'Failed message',
+            'provider' => 'textware',
+            'status' => 'failed',
+            'failed_at' => now()->setDate(2026, 5, 13)->setTime(10, 30),
+            'error_message' => 'Provider rejected message',
+        ]);
+
+        $this->actingAs($this->manager)
+            ->get(route('reports.campaign', $campaign))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Reports/Campaign')
+                ->where('status_counts.sent', 0)
+                ->where('status_counts.failed', 0)
+                ->where('failed_messages.0.contact_name', 'Failed Recipient')
+                ->where('failed_messages.0.contact_phone', $contact->phone_normalised)
+                ->where('failed_messages.0.error_message', 'Provider rejected message')
             );
     }
 
