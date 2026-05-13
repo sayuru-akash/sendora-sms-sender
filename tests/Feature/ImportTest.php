@@ -15,6 +15,8 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
+use OpenSpout\Common\Entity\Row;
+use OpenSpout\Writer\XLSX\Writer as XLSXWriter;
 use Tests\TestCase;
 
 class ImportTest extends TestCase
@@ -222,6 +224,56 @@ class ImportTest extends TestCase
         $this->assertSame('uploaded', $import->fresh()->status);
         $this->assertSame(0, ImportRow::where('import_id', $import->id)->count());
         Queue::assertNothingPushed();
+    }
+
+    public function test_xlsx_preview_and_confirm_create_import_rows(): void
+    {
+        Queue::fake();
+
+        Storage::disk('local')->makeDirectory('imports');
+        $relativePath = 'imports/contacts.xlsx';
+        $absolutePath = Storage::disk('local')->path($relativePath);
+
+        $writer = new XLSXWriter;
+        $writer->openToFile($absolutePath);
+        $writer->addRow(Row::fromValues(['Full Name', 'Phone']));
+        $writer->addRow(Row::fromValues(['Student One', '0771234567']));
+        $writer->close();
+
+        $import = Import::factory()->create([
+            'created_by' => $this->user->id,
+            'file_path' => $relativePath,
+            'type' => 'xlsx',
+            'status' => 'uploaded',
+            'total_rows' => 1,
+        ]);
+
+        $this->actingAs($this->user)->postJson(route('imports.preview', $import), [
+            'column_mapping' => [
+                'phone' => 'Phone',
+                'full_name' => 'Full Name',
+            ],
+        ])->assertOk()
+            ->assertJsonPath('preview.0.phone', '0771234567')
+            ->assertJsonPath('preview.0.full_name', 'Student One');
+
+        $this->actingAs($this->user)->postJson(route('imports.confirm', $import), [
+            'column_mapping' => [
+                'phone' => 'Phone',
+                'full_name' => 'Full Name',
+            ],
+            'options' => [
+                'duplicate_handling' => 'skip',
+            ],
+        ])->assertOk();
+
+        $this->assertSame(1, ImportRow::where('import_id', $import->id)->count());
+        $this->assertDatabaseHas('import_rows', [
+            'import_id' => $import->id,
+            'row_number' => 1,
+            'status' => 'pending',
+        ]);
+        Queue::assertPushed(ProcessImport::class);
     }
 
     public function test_process_import_assigns_selected_lists_and_tags_to_new_and_duplicate_contacts(): void

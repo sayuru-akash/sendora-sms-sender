@@ -397,8 +397,10 @@ class ImportController extends Controller
         foreach ($reader->getSheetIterator() as $sheet) {
             foreach ($sheet->getRowIterator() as $rowIndex => $row) {
                 if ($rowIndex === 1) {
-                    $headers = $row->getCells();
-                    $headers = array_map(fn ($cell) => (string) $cell, $headers);
+                    $headers = array_map(
+                        fn ($cell) => (string) $cell,
+                        $row->toArray(),
+                    );
                 }
                 break;
             }
@@ -439,8 +441,10 @@ class ImportController extends Controller
         $headers = [];
         foreach ($reader->getSheetIterator() as $sheet) {
             foreach ($sheet->getRowIterator() as $rowIndex => $row) {
-                $cells = $row->getCells();
-                $cells = array_map(fn ($cell) => (string) $cell, $cells);
+                $cells = array_map(
+                    fn ($cell) => (string) $cell,
+                    $row->toArray(),
+                );
                 if ($rowIndex === 1) {
                     $headers = $cells;
 
@@ -495,8 +499,10 @@ class ImportController extends Controller
             $headers = [];
             foreach ($reader->getSheetIterator() as $sheet) {
                 foreach ($sheet->getRowIterator() as $rowIndex => $row) {
-                    $cells = $row->getCells();
-                    $cells = array_map(fn ($cell) => (string) $cell, $cells);
+                    $cells = array_map(
+                        fn ($cell) => (string) $cell,
+                        $row->toArray(),
+                    );
                     if ($rowIndex === 1) {
                         $headers = $cells;
 
