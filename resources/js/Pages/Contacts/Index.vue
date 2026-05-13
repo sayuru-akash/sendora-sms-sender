@@ -34,7 +34,7 @@ import type { Contact } from '@/types/contact';
 import type { Tag as TagType, ListModel, Pagination } from '@/types';
 import { createColumnHelper } from '@tanstack/vue-table';
 import { h } from 'vue';
-import { formatNumber } from '@/lib/utils';
+import { formatDateTime, formatNumber, formatRelativeTime } from '@/lib/utils';
 import { useConfirm } from '@/composables/useConfirm';
 import { toast } from 'vue-sonner';
 
@@ -233,6 +233,17 @@ function tagPriority(name: string) {
   return 3;
 }
 
+function renderTimestamp(value?: string | null) {
+  if (!value) {
+    return h('span', { class: 'text-xs text-muted-foreground' }, '—');
+  }
+
+  return h('div', { class: 'min-w-[9.5rem]' }, [
+    h('p', { class: 'whitespace-nowrap text-sm font-medium text-foreground' }, formatRelativeTime(value)),
+    h('p', { class: 'mt-0.5 whitespace-nowrap text-[11px] text-muted' }, formatDateTime(value)),
+  ]);
+}
+
 const columns = [
   columnHelper.accessor('full_name', {
     header: 'Name',
@@ -309,6 +320,18 @@ const columns = [
     header: 'Status',
     size: 90,
     cell: (info) => h(StatusBadge, { status: info.getValue() }),
+  }),
+  columnHelper.accessor('updated_at', {
+    header: 'Last Updated',
+    size: 168,
+    cell: (info) => renderTimestamp(info.getValue()),
+    enableSorting: true,
+  }),
+  columnHelper.accessor('created_at', {
+    header: 'Added',
+    size: 168,
+    cell: (info) => renderTimestamp(info.getValue()),
+    enableSorting: true,
   }),
   columnHelper.display({
     id: 'actions',

@@ -31,7 +31,7 @@ class ContactController extends Controller
 
         $sortBy = $request->get('sort_by', 'created_at');
         $sortDir = $request->get('sort_dir', 'desc');
-        $allowedSorts = ['first_name', 'last_name', 'full_name', 'phone', 'email', 'company', 'status', 'source', 'created_at'];
+        $allowedSorts = ['first_name', 'last_name', 'full_name', 'phone', 'email', 'company', 'status', 'source', 'created_at', 'updated_at'];
 
         if (in_array($sortBy, $allowedSorts)) {
             $query->orderBy($sortBy, $sortDir === 'asc' ? 'asc' : 'desc');

@@ -53,7 +53,7 @@ const bottomNavItems = computed<NavItem[]>(() => {
   const items: NavItem[] = [
     { label: 'Settings', href: route('settings.index'), icon: Settings, routeName: 'settings.*' },
   ];
-  const role = page.props.auth.user?.role;
+  const role = page.props.auth?.user?.role;
   if (role === 'owner' || role === 'admin') {
     items.unshift({
       label: 'Users',

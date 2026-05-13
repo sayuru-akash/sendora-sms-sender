@@ -136,6 +136,34 @@ class ContactTest extends TestCase
             );
     }
 
+    public function test_contacts_index_supports_updated_timestamp_sorting_and_exposes_timestamps(): void
+    {
+        Contact::factory()->create([
+            'full_name' => 'Older Update',
+            'phone_normalised' => '94773333331',
+            'created_at' => now()->setDate(2026, 5, 9)->setTime(9, 0),
+            'updated_at' => now()->setDate(2026, 5, 10)->setTime(9, 0),
+        ]);
+        Contact::factory()->create([
+            'full_name' => 'Newer Update',
+            'phone_normalised' => '94773333332',
+            'created_at' => now()->setDate(2026, 5, 8)->setTime(9, 0),
+            'updated_at' => now()->setDate(2026, 5, 12)->setTime(9, 0),
+        ]);
+
+        $this->actingAs($this->user)
+            ->get('/contacts?sort_by=updated_at&sort_dir=desc')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Contacts/Index')
+                ->where('filters.sort_by', 'updated_at')
+                ->where('filters.sort_dir', 'desc')
+                ->where('contacts.data.0.full_name', 'Newer Update')
+                ->has('contacts.data.0.created_at')
+                ->has('contacts.data.0.updated_at')
+            );
+    }
+
     public function test_contacts_index_exposes_live_source_filter_options(): void
     {
         Contact::factory()->create([

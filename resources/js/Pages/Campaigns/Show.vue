@@ -22,7 +22,7 @@ import { useConfirm } from '@/composables/useConfirm';
 const props = defineProps<{
   campaign: Campaign;
   recipients: { data: CampaignRecipient[]; meta: Pagination };
-  recent_activities: ActivityLog[];
+  recent_activities?: ActivityLog[];
 }>();
 
 const { confirm } = useConfirm();
@@ -31,6 +31,7 @@ const retryingRecipientId = ref<number | null>(null);
 let refreshTimer: number | undefined;
 
 const canResendFailed = computed(() => ['completed', 'failed'].includes(props.campaign.status) && props.campaign.failed_count > 0);
+const recentActivities = computed(() => props.recent_activities ?? []);
 const activityLogUrl = computed(() => route('activity-logs.index', {
   subject_type: 'App\\Models\\SmsCampaign',
   subject_id: props.campaign.id,
@@ -82,7 +83,7 @@ async function resendFailedCampaign() {
   isResendingFailed.value = true;
   router.post(route('campaigns.resend-failed', props.campaign.id), {}, {
     preserveScroll: true,
-    only: ['campaign', 'recipients'],
+    only: ['campaign', 'recipients', 'recent_activities'],
     onFinish: () => {
       isResendingFailed.value = false;
     },
@@ -100,7 +101,7 @@ async function resendRecipient(recipient: CampaignRecipient) {
   retryingRecipientId.value = recipient.id;
   router.post(route('campaigns.recipients.resend', [props.campaign.id, recipient.id]), {}, {
     preserveScroll: true,
-    only: ['campaign', 'recipients'],
+    only: ['campaign', 'recipients', 'recent_activities'],
     onFinish: () => {
       retryingRecipientId.value = null;
     },
@@ -127,7 +128,7 @@ function refreshCampaignState() {
   if (document.visibilityState !== 'visible') return;
 
   router.reload({
-    only: ['campaign', 'recipients'],
+    only: ['campaign', 'recipients', 'recent_activities'],
   });
 }
 
@@ -262,12 +263,12 @@ onBeforeUnmount(() => {
         </Link>
       </CardHeader>
       <CardContent>
-        <div v-if="recent_activities.length === 0" class="rounded-lg border border-dashed border-border px-4 py-6 text-center text-sm text-muted">
+        <div v-if="recentActivities.length === 0" class="rounded-lg border border-dashed border-border px-4 py-6 text-center text-sm text-muted">
           No activity recorded for this campaign yet.
         </div>
         <div v-else class="divide-y divide-border">
           <div
-            v-for="activity in recent_activities"
+            v-for="activity in recentActivities"
             :key="activity.id"
             class="flex items-start justify-between gap-4 py-3 first:pt-0 last:pb-0"
           >
