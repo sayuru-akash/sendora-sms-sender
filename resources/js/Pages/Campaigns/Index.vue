@@ -19,17 +19,19 @@ import type { Pagination as PaginationType } from '@/types';
 import { formatDate, formatNumber } from '@/lib/utils';
 import { useConfirm } from '@/composables/useConfirm';
 
+interface CampaignSummary {
+  campaigns_count: number;
+  total_recipients_sum: number;
+  sent_count_sum: number;
+  failed_count_sum: number;
+  pending_count_sum: number;
+  queued_count_sum: number;
+  status_counts: Record<string, number>;
+}
+
 const props = defineProps<{
   campaigns: { data: Campaign[]; meta: PaginationType };
-  summary: {
-    campaigns_count: number;
-    total_recipients_sum: number;
-    sent_count_sum: number;
-    failed_count_sum: number;
-    pending_count_sum: number;
-    queued_count_sum: number;
-    status_counts: Record<string, number>;
-  };
+  summary?: CampaignSummary;
   filters: {
     search?: string;
     status?: string;
@@ -41,6 +43,19 @@ const search = ref(props.filters.search ?? '');
 const selectedStatus = ref(props.filters.status ?? '');
 const processingCampaignId = ref<number | null>(null);
 let refreshTimer: number | undefined;
+
+const emptySummary: CampaignSummary = {
+  campaigns_count: 0,
+  total_recipients_sum: 0,
+  sent_count_sum: 0,
+  failed_count_sum: 0,
+  pending_count_sum: 0,
+  queued_count_sum: 0,
+  status_counts: {},
+};
+
+const summaryData = computed(() => props.summary ?? emptySummary);
+const statusCountEntries = computed(() => Object.entries(summaryData.value.status_counts));
 
 const statusOptions = [
   { label: 'All statuses', value: '' },
@@ -54,7 +69,7 @@ const statusOptions = [
   { label: 'Cancelled', value: 'cancelled' },
 ];
 
-const activeWorkCount = computed(() => props.summary.pending_count_sum + props.summary.queued_count_sum);
+const activeWorkCount = computed(() => summaryData.value.pending_count_sum + summaryData.value.queued_count_sum);
 
 function successRateFor(campaign: Campaign) {
   return Number.isFinite(Number(campaign.success_rate)) ? Number(campaign.success_rate) : 0;
@@ -172,19 +187,19 @@ onBeforeUnmount(() => {
     <div class="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
       <div class="rounded-lg border border-border bg-white px-4 py-3">
         <p class="text-xs font-medium uppercase tracking-wide text-muted">Campaigns</p>
-        <p class="mt-1 text-2xl font-semibold text-foreground">{{ formatNumber(summary.campaigns_count) }}</p>
+        <p class="mt-1 text-2xl font-semibold text-foreground">{{ formatNumber(summaryData.campaigns_count) }}</p>
       </div>
       <div class="rounded-lg border border-border bg-white px-4 py-3">
         <p class="text-xs font-medium uppercase tracking-wide text-muted">Recipients</p>
-        <p class="mt-1 text-2xl font-semibold text-foreground">{{ formatNumber(summary.total_recipients_sum) }}</p>
+        <p class="mt-1 text-2xl font-semibold text-foreground">{{ formatNumber(summaryData.total_recipients_sum) }}</p>
       </div>
       <div class="rounded-lg border border-border bg-white px-4 py-3">
         <p class="text-xs font-medium uppercase tracking-wide text-muted">Sent</p>
-        <p class="mt-1 text-2xl font-semibold text-success">{{ formatNumber(summary.sent_count_sum) }}</p>
+        <p class="mt-1 text-2xl font-semibold text-success">{{ formatNumber(summaryData.sent_count_sum) }}</p>
       </div>
       <div class="rounded-lg border border-border bg-white px-4 py-3">
         <p class="text-xs font-medium uppercase tracking-wide text-muted">Needs Attention</p>
-        <p class="mt-1 text-2xl font-semibold text-danger">{{ formatNumber(summary.failed_count_sum) }}</p>
+        <p class="mt-1 text-2xl font-semibold text-danger">{{ formatNumber(summaryData.failed_count_sum) }}</p>
         <p class="mt-1 text-xs text-muted">{{ formatNumber(activeWorkCount) }} queued or pending</p>
       </div>
     </div>
@@ -207,7 +222,7 @@ onBeforeUnmount(() => {
       </div>
       <div class="flex flex-wrap gap-2">
         <Badge
-          v-for="[status, count] in Object.entries(summary.status_counts)"
+          v-for="[status, count] in statusCountEntries"
           :key="status"
           variant="outline"
           class="capitalize"
