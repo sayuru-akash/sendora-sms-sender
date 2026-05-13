@@ -42,6 +42,7 @@ const props = defineProps<{
   contacts: { data: Contact[]; meta: Pagination };
   tags: TagType[];
   lists: ListModel[];
+  sourceOptions: string[];
   filters: Record<string, string | undefined>;
 }>();
 
@@ -68,15 +69,6 @@ const statusOptions = [
   { label: 'Invalid', value: 'invalid' },
 ];
 
-const sourceOptions = [
-  { label: 'All', value: '' },
-  { label: 'Manual', value: 'manual' },
-  { label: 'Import', value: 'import' },
-  { label: 'API', value: 'api' },
-  { label: 'Web', value: 'web' },
-  { label: 'Referral', value: 'referral' },
-];
-
 const tagOptions = computed(() => [
   { label: 'All', value: '' },
   ...props.tags.map((t) => ({ label: t.name, value: String(t.id) })),
@@ -87,13 +79,39 @@ const listOptions = computed(() => [
   ...props.lists.map((l) => ({ label: l.name, value: String(l.id) })),
 ]);
 
-function applyFilters() {
-  router.get(route('contacts.index'), {
+const sourceFilterOptions = computed(() => {
+  const liveSources = new Set(props.sourceOptions);
+
+  if (selectedFilters.value.source) {
+    liveSources.add(selectedFilters.value.source);
+  }
+
+  return [
+    { label: 'All', value: '' },
+    ...[...liveSources].sort((first, second) => first.localeCompare(second)).map((source) => ({
+      label: source,
+      value: source,
+    })),
+  ];
+});
+
+const activeSortBy = computed(() => props.filters.sort_by ?? 'created_at');
+const activeSortDir = computed<'asc' | 'desc'>(() => props.filters.sort_dir === 'asc' ? 'asc' : 'desc');
+
+function requestParams(overrides: Record<string, string | undefined> = {}) {
+  return {
     search: search.value || undefined,
     ...Object.fromEntries(
-      Object.entries(selectedFilters.value).filter(([, v]) => v !== '')
+      Object.entries(selectedFilters.value).filter(([, value]) => value !== '')
     ),
-  }, { preserveState: true });
+    sort_by: activeSortBy.value,
+    sort_dir: activeSortDir.value,
+    ...overrides,
+  };
+}
+
+function applyFilters() {
+  router.get(route('contacts.index'), requestParams(), { preserveState: true });
 }
 
 function resetFilters() {
@@ -104,6 +122,21 @@ function resetFilters() {
 function handleSearch(val: string) {
   search.value = val;
   applyFilters();
+}
+
+function handleSortChange(sort: { sortBy?: string; sortDir?: 'asc' | 'desc' }) {
+  router.get(
+    route('contacts.index'),
+    requestParams({
+      sort_by: sort.sortBy ?? 'created_at',
+      sort_dir: sort.sortDir ?? 'desc',
+    }),
+    {
+      preserveScroll: true,
+      preserveState: true,
+      replace: true,
+    }
+  );
 }
 
 async function deleteContact(contact: Contact) {
@@ -349,8 +382,12 @@ const columns = [
       :data="contacts.data"
       :meta="contacts.meta"
       :selectable="true"
+      :manual-sorting="true"
+      :sort-by="activeSortBy"
+      :sort-dir="activeSortDir"
       empty-title="No contacts found"
       empty-description="Add your first contact or import from a CSV file."
+      @sort-change="handleSortChange"
     >
       <template #empty-action>
         <Link :href="route('contacts.create')">
@@ -398,7 +435,7 @@ const columns = [
         </div>
         <div class="space-y-1.5">
           <Label>Source</Label>
-          <Select v-model="selectedFilters.source" :options="sourceOptions" placeholder="All sources" />
+          <Select v-model="selectedFilters.source" :options="sourceFilterOptions" placeholder="All sources" />
         </div>
         <div class="space-y-1.5">
           <Label>City</Label>

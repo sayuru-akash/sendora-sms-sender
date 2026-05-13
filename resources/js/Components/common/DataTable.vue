@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, h, ref, watch } from 'vue';
 import {
   useVueTable,
   getCoreRowModel,
@@ -9,7 +9,6 @@ import {
   type RowSelectionState,
   FlexRender,
 } from '@tanstack/vue-table';
-import { ref } from 'vue';
 import Table from '@/Components/ui/Table.vue';
 import TableHeader from '@/Components/ui/TableHeader.vue';
 import TableBody from '@/Components/ui/TableBody.vue';
@@ -31,16 +30,39 @@ const props = defineProps<{
   selectable?: boolean;
   emptyTitle?: string;
   emptyDescription?: string;
+  manualSorting?: boolean;
+  sortBy?: string;
+  sortDir?: 'asc' | 'desc';
 }>();
 
 const emit = defineEmits<{
   'row-click': [row: unknown];
+  'sort-change': [sort: { sortBy?: string; sortDir?: 'asc' | 'desc' }];
 }>();
 
-const sorting = ref<SortingState>([]);
+const sorting = ref<SortingState>(createSortingState(props.sortBy, props.sortDir));
 const rowSelection = ref<RowSelectionState>({});
 
 const enableSelection = computed(() => props.selectable ?? false);
+
+watch(
+  () => [props.sortBy, props.sortDir] as const,
+  ([sortBy, sortDir]) => {
+    if (!props.manualSorting) {
+      return;
+    }
+
+    sorting.value = createSortingState(sortBy, sortDir);
+  }
+);
+
+function createSortingState(sortBy?: string, sortDir?: 'asc' | 'desc'): SortingState {
+  if (!sortBy || !sortDir) {
+    return [];
+  }
+
+  return [{ id: sortBy, desc: sortDir === 'desc' }];
+}
 
 const tableColumns = computed<ColumnDef<any, any>[]>(() => {
   if (!enableSelection.value) return props.columns;
@@ -83,12 +105,22 @@ const table = useVueTable({
   },
   onSortingChange: (updater) => {
     sorting.value = typeof updater === 'function' ? updater(sorting.value) : updater;
+
+    if (props.manualSorting) {
+      const nextSort = sorting.value[0];
+
+      emit('sort-change', {
+        sortBy: nextSort?.id,
+        sortDir: nextSort ? (nextSort.desc ? 'desc' : 'asc') : undefined,
+      });
+    }
   },
   onRowSelectionChange: (updater) => {
     rowSelection.value = typeof updater === 'function' ? updater(rowSelection.value) : updater;
   },
   getCoreRowModel: getCoreRowModel(),
   getSortedRowModel: getSortedRowModel(),
+  manualSorting: props.manualSorting ?? false,
   enableRowSelection: enableSelection.value,
 });
 
@@ -99,8 +131,6 @@ const selectedRows = computed(() => {
 function clearSelection() {
   rowSelection.value = {};
 }
-
-import { h } from 'vue';
 
 defineExpose({ selectedRows, clearSelection });
 </script>

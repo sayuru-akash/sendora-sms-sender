@@ -7,6 +7,7 @@ use App\Models\ListModel;
 use App\Models\Tag;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
 class ContactTest extends TestCase
@@ -110,6 +111,55 @@ class ContactTest extends TestCase
         $response = $this->actingAs($this->user)->getJson('/contacts');
 
         $response->assertStatus(200);
+    }
+
+    public function test_contacts_index_supports_server_side_sorting(): void
+    {
+        Contact::factory()->create([
+            'full_name' => 'Zulu Student',
+            'phone_normalised' => '94771111111',
+        ]);
+        Contact::factory()->create([
+            'full_name' => 'Alpha Student',
+            'phone_normalised' => '94772222222',
+        ]);
+
+        $this->actingAs($this->user)
+            ->get('/contacts?sort_by=full_name&sort_dir=asc')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Contacts/Index')
+                ->where('filters.sort_by', 'full_name')
+                ->where('filters.sort_dir', 'asc')
+                ->where('contacts.data.0.full_name', 'Alpha Student')
+                ->where('contacts.data.1.full_name', 'Zulu Student')
+            );
+    }
+
+    public function test_contacts_index_exposes_live_source_filter_options(): void
+    {
+        Contact::factory()->create([
+            'source' => 'CCB - 26.1 registrations',
+            'phone_normalised' => '94771111111',
+        ]);
+        Contact::factory()->create([
+            'source' => 'CCB - 26.1 students',
+            'phone_normalised' => '94772222222',
+        ]);
+        Contact::factory()->create([
+            'source' => 'manual',
+            'phone_normalised' => '94773333333',
+        ]);
+
+        $this->actingAs($this->user)
+            ->get('/contacts')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Contacts/Index')
+                ->where('sourceOptions.0', 'CCB - 26.1 registrations')
+                ->where('sourceOptions.1', 'CCB - 26.1 students')
+                ->where('sourceOptions.2', 'manual')
+            );
     }
 
     public function test_can_filter_by_status(): void

@@ -41,11 +41,19 @@ class ContactController extends Controller
 
         $tags = Tag::orderBy('name')->get(['id', 'name', 'colour']);
         $lists = ListModel::active()->orderBy('name')->get(['id', 'name', 'colour']);
+        $sourceOptions = Contact::query()
+            ->whereNotNull('source')
+            ->where('source', '!=', '')
+            ->distinct()
+            ->orderBy('source')
+            ->pluck('source')
+            ->values();
 
         return Inertia::render('Contacts/Index', [
             'contacts' => $contacts,
             'tags' => $tags,
             'lists' => $lists,
+            'sourceOptions' => $sourceOptions,
             'filters' => $request->only(['search', 'status', 'source', 'district', 'city', 'tag_id', 'list_id', 'date_from', 'date_to', 'sort_by', 'sort_dir', 'per_page']),
         ]);
     }
