@@ -39,25 +39,39 @@ import { useConfirm } from '@/composables/useConfirm';
 import { toast } from 'vue-sonner';
 
 const props = defineProps<{
-  contacts: { data: Contact[]; meta: Pagination };
-  tags: TagType[];
-  lists: ListModel[];
-  sourceOptions: string[];
-  filters: Record<string, string | undefined>;
+  contacts?: { data: Contact[]; meta: Pagination };
+  tags?: TagType[];
+  lists?: ListModel[];
+  sourceOptions?: string[];
+  filters?: Record<string, string | undefined>;
 }>();
 
+const emptyMeta: Pagination = {
+  current_page: 1,
+  last_page: 1,
+  per_page: 25,
+  total: 0,
+  from: null,
+  to: null,
+};
+
+const safeContacts = computed(() => props.contacts ?? { data: [], meta: emptyMeta });
+const safeTags = computed(() => props.tags ?? []);
+const safeLists = computed(() => props.lists ?? []);
+const safeSourceOptions = computed(() => props.sourceOptions ?? []);
+const safeFilters = computed(() => props.filters ?? {});
 const { confirm } = useConfirm();
-const search = ref(props.filters.search ?? '');
+const search = ref(safeFilters.value.search ?? '');
 const filtersOpen = ref(false);
 const bulkProcessing = ref(false);
 const bulkTagId = ref('');
 const bulkListId = ref('');
 const selectedFilters = ref({
-  status: props.filters.status ?? '',
-  tag_id: props.filters.tag_id ?? '',
-  list_id: props.filters.list_id ?? '',
-  source: props.filters.source ?? '',
-  city: props.filters.city ?? '',
+  status: safeFilters.value.status ?? '',
+  tag_id: safeFilters.value.tag_id ?? '',
+  list_id: safeFilters.value.list_id ?? '',
+  source: safeFilters.value.source ?? '',
+  city: safeFilters.value.city ?? '',
 });
 
 const statusOptions = [
@@ -71,16 +85,16 @@ const statusOptions = [
 
 const tagOptions = computed(() => [
   { label: 'All', value: '' },
-  ...props.tags.map((t) => ({ label: t.name, value: String(t.id) })),
+  ...safeTags.value.map((t) => ({ label: t.name, value: String(t.id) })),
 ]);
 
 const listOptions = computed(() => [
   { label: 'All', value: '' },
-  ...props.lists.map((l) => ({ label: l.name, value: String(l.id) })),
+  ...safeLists.value.map((l) => ({ label: l.name, value: String(l.id) })),
 ]);
 
 const sourceFilterOptions = computed(() => {
-  const liveSources = new Set(props.sourceOptions);
+  const liveSources = new Set(safeSourceOptions.value);
 
   if (selectedFilters.value.source) {
     liveSources.add(selectedFilters.value.source);
@@ -95,8 +109,8 @@ const sourceFilterOptions = computed(() => {
   ];
 });
 
-const activeSortBy = computed(() => props.filters.sort_by ?? 'created_at');
-const activeSortDir = computed<'asc' | 'desc'>(() => props.filters.sort_dir === 'asc' ? 'asc' : 'desc');
+const activeSortBy = computed(() => safeFilters.value.sort_by ?? 'created_at');
+const activeSortDir = computed<'asc' | 'desc'>(() => safeFilters.value.sort_dir === 'asc' ? 'asc' : 'desc');
 
 function requestParams(overrides: Record<string, string | undefined> = {}) {
   return {
@@ -203,7 +217,7 @@ async function runBulkAction(payload: Record<string, unknown>, clearSelection: (
     const response = await window.axios.post(route('contacts.bulk-action'), payload);
     toast.success(response.data.message ?? 'Contacts updated');
     clearSelection();
-    router.reload({ only: ['contacts'] });
+    router.reload({ only: ['contacts', 'tags', 'lists', 'sourceOptions'] });
   } catch (error) {
     toast.error('Bulk action failed');
   } finally {
@@ -366,7 +380,7 @@ const columns = [
   <Head title="Contacts" />
 
   <AppLayout :breadcrumbs="[{ label: 'Contacts' }]">
-    <PageHeader title="Contacts" :subtitle="`${formatNumber(contacts.meta.total)} total contacts`">
+    <PageHeader title="Contacts" :subtitle="`${formatNumber(safeContacts.meta.total)} total contacts`">
       <template #actions>
         <Button variant="outline" @click="exportContacts">
           <Download class="h-4 w-4" />
@@ -402,8 +416,8 @@ const columns = [
 
     <DataTable
       :columns="columns"
-      :data="contacts.data"
-      :meta="contacts.meta"
+      :data="safeContacts.data"
+      :meta="safeContacts.meta"
       :selectable="true"
       :manual-sorting="true"
       :sort-by="activeSortBy"

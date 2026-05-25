@@ -21,9 +21,18 @@ import { useConfirm } from '@/composables/useConfirm';
 
 const props = defineProps<{
   campaign: Campaign;
-  recipients: { data: CampaignRecipient[]; meta: Pagination };
+  recipients?: { data: CampaignRecipient[]; meta: Pagination };
   recent_activities?: ActivityLog[];
 }>();
+
+const emptyMeta: Pagination = {
+  current_page: 1,
+  last_page: 1,
+  per_page: 25,
+  total: 0,
+  from: null,
+  to: null,
+};
 
 const { confirm } = useConfirm();
 const isResendingFailed = ref(false);
@@ -31,6 +40,7 @@ const retryingRecipientId = ref<number | null>(null);
 let refreshTimer: number | undefined;
 
 const canResendFailed = computed(() => ['completed', 'failed'].includes(props.campaign.status) && props.campaign.failed_count > 0);
+const safeRecipients = computed(() => props.recipients ?? { data: [], meta: emptyMeta });
 const recentActivities = computed(() => props.recent_activities ?? []);
 const activityLogUrl = computed(() => route('activity-logs.index', {
   subject_type: 'App\\Models\\SmsCampaign',
@@ -309,7 +319,7 @@ onBeforeUnmount(() => {
               </tr>
             </thead>
             <tbody>
-              <tr v-for="r in recipients.data" :key="r.id" class="border-b border-border hover:bg-gray-50/50">
+              <tr v-for="r in safeRecipients.data" :key="r.id" class="border-b border-border hover:bg-gray-50/50">
                 <td class="px-4 py-3 text-sm text-foreground">{{ r.contact_name }}</td>
                 <td class="px-4 py-3 text-sm text-foreground">{{ r.contact_phone }}</td>
                 <td class="px-4 py-3"><StatusBadge :status="r.status" /></td>
@@ -331,7 +341,7 @@ onBeforeUnmount(() => {
                   <span v-else class="text-xs text-muted">—</span>
                 </td>
               </tr>
-              <tr v-if="recipients.data.length === 0">
+              <tr v-if="safeRecipients.data.length === 0">
                 <td colspan="6" class="px-4 py-8 text-center text-sm text-muted">
                   No recipients prepared yet.
                 </td>

@@ -13,16 +13,26 @@ import type { Tag, Pagination } from '@/types';
 import type { Contact } from '@/types/contact';
 import type { Campaign } from '@/types/campaign';
 import { createColumnHelper } from '@tanstack/vue-table';
-import { h } from 'vue';
+import { computed, h } from 'vue';
 import { formatNumber, formatDate } from '@/lib/utils';
 import { useConfirm } from '@/composables/useConfirm';
 
 const props = defineProps<{
   tag: Tag;
-  contacts: { data: Contact[]; meta: Pagination };
-  campaigns: Campaign[];
+  contacts?: { data: Contact[]; meta: Pagination };
+  campaigns?: Campaign[];
 }>();
 
+const emptyMeta: Pagination = {
+  current_page: 1,
+  last_page: 1,
+  per_page: 25,
+  total: 0,
+  from: null,
+  to: null,
+};
+
+const safeContacts = computed(() => props.contacts ?? { data: [], meta: emptyMeta });
 const { confirm } = useConfirm();
 
 async function deleteTag() {
@@ -98,8 +108,8 @@ const columns = [
 
     <DataTable
       :columns="columns"
-      :data="contacts.data"
-      :meta="contacts.meta"
+      :data="safeContacts.data"
+      :meta="safeContacts.meta"
       empty-title="No contacts with this tag"
     />
   </AppLayout>

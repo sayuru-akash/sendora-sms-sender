@@ -30,20 +30,26 @@ interface CampaignSummary {
 }
 
 const props = defineProps<{
-  campaigns: { data: Campaign[]; meta: PaginationType };
+  campaigns?: { data: Campaign[]; meta: PaginationType };
   summary?: CampaignSummary;
-  filters: {
+  filters?: {
     search?: string;
     status?: string;
   };
 }>();
 
 const { confirm } = useConfirm();
-const search = ref(props.filters.search ?? '');
-const selectedStatus = ref(props.filters.status ?? '');
 const processingCampaignId = ref<number | null>(null);
 let refreshTimer: number | undefined;
 
+const emptyMeta: PaginationType = {
+  current_page: 1,
+  last_page: 1,
+  per_page: 25,
+  total: 0,
+  from: null,
+  to: null,
+};
 const emptySummary: CampaignSummary = {
   campaigns_count: 0,
   total_recipients_sum: 0,
@@ -54,8 +60,12 @@ const emptySummary: CampaignSummary = {
   status_counts: {},
 };
 
+const safeCampaigns = computed(() => props.campaigns ?? { data: [], meta: emptyMeta });
+const safeFilters = computed(() => props.filters ?? {});
 const summaryData = computed(() => props.summary ?? emptySummary);
 const statusCountEntries = computed(() => Object.entries(summaryData.value.status_counts));
+const search = ref(safeFilters.value.search ?? '');
+const selectedStatus = ref(safeFilters.value.status ?? '');
 
 const statusOptions = [
   { label: 'All statuses', value: '' },
@@ -173,7 +183,7 @@ onBeforeUnmount(() => {
   <Head title="Campaigns" />
 
   <AppLayout :breadcrumbs="[{ label: 'Campaigns' }]">
-    <PageHeader title="Campaigns" :subtitle="`${formatNumber(campaigns.meta.total)} campaigns in view`">
+    <PageHeader title="Campaigns" :subtitle="`${formatNumber(safeCampaigns.meta.total)} campaigns in view`">
       <template #actions>
         <Link :href="route('campaigns.builder')">
           <Button>
@@ -232,7 +242,7 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <div v-if="campaigns.data.length === 0" class="py-8">
+    <div v-if="safeCampaigns.data.length === 0" class="py-8">
       <EmptyState
         :icon="Send"
         :title="search || selectedStatus ? 'No campaigns found' : 'No campaigns yet'"
@@ -264,7 +274,7 @@ onBeforeUnmount(() => {
         </thead>
         <tbody>
           <tr
-            v-for="campaign in campaigns.data"
+            v-for="campaign in safeCampaigns.data"
             :key="campaign.id"
             class="border-b border-border hover:bg-gray-50/50 transition-colors"
           >
@@ -338,6 +348,6 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <Pagination :meta="campaigns.meta" />
+    <Pagination :meta="safeCampaigns.meta" />
   </AppLayout>
 </template>

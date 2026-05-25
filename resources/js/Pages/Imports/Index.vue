@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import AppLayout from '@/Components/layout/AppLayout.vue';
 import PageHeader from '@/Components/common/PageHeader.vue';
 import StatusBadge from '@/Components/common/StatusBadge.vue';
@@ -16,13 +16,13 @@ import type { Pagination as PaginationType } from '@/types';
 import { formatDate, formatNumber } from '@/lib/utils';
 
 const props = defineProps<{
-  imports: { data: Import[]; meta: PaginationType };
+  imports?: { data: Import[]; meta: PaginationType };
   filters?: {
     search?: string;
     status?: string;
     per_page?: string | number;
   };
-  summary: {
+  summary?: {
     total: number;
     processing: number;
     completed: number;
@@ -30,6 +30,23 @@ const props = defineProps<{
   };
 }>();
 
+const emptyMeta: PaginationType = {
+  current_page: 1,
+  last_page: 1,
+  per_page: 25,
+  total: 0,
+  from: null,
+  to: null,
+};
+const emptySummary = {
+  total: 0,
+  processing: 0,
+  completed: 0,
+  failed: 0,
+};
+
+const safeImports = computed(() => props.imports ?? { data: [], meta: emptyMeta });
+const summaryData = computed(() => props.summary ?? emptySummary);
 const search = ref(props.filters?.search ?? '');
 const status = ref(props.filters?.status ?? '');
 
@@ -86,19 +103,19 @@ function remainingItems(items?: Array<{ name: string }>) {
     <div class="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
       <div class="rounded-xl border border-border bg-white p-4">
         <p class="text-xs font-medium uppercase tracking-wide text-muted">Total</p>
-        <p class="mt-1 text-2xl font-semibold text-foreground">{{ formatNumber(summary.total) }}</p>
+        <p class="mt-1 text-2xl font-semibold text-foreground">{{ formatNumber(summaryData.total) }}</p>
       </div>
       <div class="rounded-xl border border-border bg-white p-4">
         <p class="text-xs font-medium uppercase tracking-wide text-muted">In Progress</p>
-        <p class="mt-1 text-2xl font-semibold text-warning">{{ formatNumber(summary.processing) }}</p>
+        <p class="mt-1 text-2xl font-semibold text-warning">{{ formatNumber(summaryData.processing) }}</p>
       </div>
       <div class="rounded-xl border border-border bg-white p-4">
         <p class="text-xs font-medium uppercase tracking-wide text-muted">Completed</p>
-        <p class="mt-1 text-2xl font-semibold text-success">{{ formatNumber(summary.completed) }}</p>
+        <p class="mt-1 text-2xl font-semibold text-success">{{ formatNumber(summaryData.completed) }}</p>
       </div>
       <div class="rounded-xl border border-border bg-white p-4">
         <p class="text-xs font-medium uppercase tracking-wide text-muted">Failed</p>
-        <p class="mt-1 text-2xl font-semibold text-danger">{{ formatNumber(summary.failed) }}</p>
+        <p class="mt-1 text-2xl font-semibold text-danger">{{ formatNumber(summaryData.failed) }}</p>
       </div>
     </div>
 
@@ -135,13 +152,13 @@ function remainingItems(items?: Array<{ name: string }>) {
           </tr>
         </thead>
         <tbody>
-          <tr v-if="imports.data.length === 0">
+          <tr v-if="safeImports.data.length === 0">
             <td colspan="7" class="px-4 py-12 text-center text-sm text-muted">
               No imports yet. Upload a CSV or XLSX file to get started.
             </td>
           </tr>
           <tr
-            v-for="imp in imports.data"
+            v-for="imp in safeImports.data"
             :key="imp.id"
             class="border-b border-border hover:bg-gray-50/50 transition-colors"
           >
@@ -223,6 +240,6 @@ function remainingItems(items?: Array<{ name: string }>) {
       </table>
       </div>
     </div>
-    <Pagination :meta="imports.meta" />
+    <Pagination :meta="safeImports.meta" />
   </AppLayout>
 </template>

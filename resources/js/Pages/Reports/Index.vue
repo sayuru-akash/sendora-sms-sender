@@ -18,29 +18,45 @@ import { formatNumber } from '@/lib/utils';
 
 use([CanvasRenderer, LineChart, BarChart, PieChart, TitleComponent, TooltipComponent, GridComponent, LegendComponent]);
 
+interface ReportStats {
+  total_contacts: number;
+  total_sms_sent: number;
+  total_campaigns: number;
+  avg_success_rate: number;
+}
+
 const props = defineProps<{
-  stats: {
-    total_contacts: number;
-    total_sms_sent: number;
-    total_campaigns: number;
-    avg_success_rate: number;
-  };
-  sms_over_time: { month: string; sent: number; failed: number }[];
-  contacts_by_source: { source: string; count: number }[];
-  contacts_by_status: { status: string; count: number }[];
-  top_lists: { name: string; count: number }[];
-  top_tags: { name: string; count: number }[];
+  stats?: ReportStats;
+  sms_over_time?: { month: string; sent: number; failed: number }[];
+  contacts_by_source?: { source: string; count: number }[];
+  contacts_by_status?: { status: string; count: number }[];
+  top_lists?: { name: string; count: number }[];
+  top_tags?: { name: string; count: number }[];
 }>();
+
+const emptyStats: ReportStats = {
+  total_contacts: 0,
+  total_sms_sent: 0,
+  total_campaigns: 0,
+  avg_success_rate: 0,
+};
+
+const safeStats = computed(() => props.stats ?? emptyStats);
+const smsOverTime = computed(() => props.sms_over_time ?? []);
+const contactsBySource = computed(() => props.contacts_by_source ?? []);
+const contactsByStatus = computed(() => props.contacts_by_status ?? []);
+const topLists = computed(() => props.top_lists ?? []);
+const topTags = computed(() => props.top_tags ?? []);
 
 const smsChartOption = computed(() => ({
   tooltip: { trigger: 'axis', backgroundColor: '#fff', borderColor: '#e5e7eb', textStyle: { color: '#1a1a1a', fontSize: 12 } },
   legend: { data: ['Sent', 'Failed'], bottom: 0, textStyle: { color: '#6b7280', fontSize: 11 } },
   grid: { top: 10, right: 16, bottom: 36, left: 48 },
-  xAxis: { type: 'category', data: props.sms_over_time.map((d) => d.month), axisLine: { lineStyle: { color: '#e5e7eb' } }, axisTick: { show: false }, axisLabel: { color: '#6b7280', fontSize: 11 } },
+  xAxis: { type: 'category', data: smsOverTime.value.map((d) => d.month), axisLine: { lineStyle: { color: '#e5e7eb' } }, axisTick: { show: false }, axisLabel: { color: '#6b7280', fontSize: 11 } },
   yAxis: { type: 'value', axisLine: { show: false }, axisTick: { show: false }, splitLine: { lineStyle: { color: '#f3f4f6' } }, axisLabel: { color: '#6b7280', fontSize: 11 } },
   series: [
-    { name: 'Sent', type: 'line', data: props.sms_over_time.map((d) => d.sent), smooth: true, lineStyle: { color: '#4f46e5', width: 2 }, itemStyle: { color: '#4f46e5' }, areaStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: 'rgba(79,70,229,0.15)' }, { offset: 1, color: 'rgba(79,70,229,0)' }] } } },
-    { name: 'Failed', type: 'line', data: props.sms_over_time.map((d) => d.failed), smooth: true, lineStyle: { color: '#ef4444', width: 2 }, itemStyle: { color: '#ef4444' } },
+    { name: 'Sent', type: 'line', data: smsOverTime.value.map((d) => d.sent), smooth: true, lineStyle: { color: '#4f46e5', width: 2 }, itemStyle: { color: '#4f46e5' }, areaStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: 'rgba(79,70,229,0.15)' }, { offset: 1, color: 'rgba(79,70,229,0)' }] } } },
+    { name: 'Failed', type: 'line', data: smsOverTime.value.map((d) => d.failed), smooth: true, lineStyle: { color: '#ef4444', width: 2 }, itemStyle: { color: '#ef4444' } },
   ],
 }));
 
@@ -48,8 +64,8 @@ const sourceChartOption = computed(() => ({
   tooltip: { trigger: 'axis', backgroundColor: '#fff', borderColor: '#e5e7eb', textStyle: { color: '#1a1a1a', fontSize: 12 } },
   grid: { top: 10, right: 16, bottom: 24, left: 80 },
   xAxis: { type: 'value', axisLine: { show: false }, axisTick: { show: false }, splitLine: { lineStyle: { color: '#f3f4f6' } }, axisLabel: { color: '#6b7280', fontSize: 11 } },
-  yAxis: { type: 'category', data: props.contacts_by_source.map((d) => d.source), axisLine: { lineStyle: { color: '#e5e7eb' } }, axisTick: { show: false }, axisLabel: { color: '#6b7280', fontSize: 11 } },
-  series: [{ type: 'bar', data: props.contacts_by_source.map((d) => d.count), itemStyle: { color: '#4f46e5', borderRadius: [0, 4, 4, 0] }, barWidth: '50%' }],
+  yAxis: { type: 'category', data: contactsBySource.value.map((d) => d.source), axisLine: { lineStyle: { color: '#e5e7eb' } }, axisTick: { show: false }, axisLabel: { color: '#6b7280', fontSize: 11 } },
+  series: [{ type: 'bar', data: contactsBySource.value.map((d) => d.count), itemStyle: { color: '#4f46e5', borderRadius: [0, 4, 4, 0] }, barWidth: '50%' }],
 }));
 
 const statusChartOption = computed(() => ({
@@ -58,7 +74,7 @@ const statusChartOption = computed(() => ({
   series: [{
     type: 'pie', radius: ['45%', '70%'],
     label: { show: false },
-    data: props.contacts_by_status.map((d, i) => ({
+    data: contactsByStatus.value.map((d, i) => ({
       value: d.count, name: d.status,
       itemStyle: { color: ['#10b981', '#6b7280', '#f59e0b', '#ef4444', '#dc2626'][i] || '#6b7280' },
     })),
@@ -69,15 +85,15 @@ const listChartOption = computed(() => ({
   tooltip: { trigger: 'axis', backgroundColor: '#fff', borderColor: '#e5e7eb', textStyle: { color: '#1a1a1a', fontSize: 12 } },
   grid: { top: 10, right: 16, bottom: 24, left: 120 },
   xAxis: { type: 'value', axisLine: { show: false }, axisTick: { show: false }, splitLine: { lineStyle: { color: '#f3f4f6' } }, axisLabel: { color: '#6b7280', fontSize: 11 } },
-  yAxis: { type: 'category', data: props.top_lists.map((d) => d.name), axisLine: { lineStyle: { color: '#e5e7eb' } }, axisTick: { show: false }, axisLabel: { color: '#6b7280', fontSize: 11 } },
-  series: [{ type: 'bar', data: props.top_lists.map((d) => d.count), itemStyle: { color: '#4f46e5', borderRadius: [0, 4, 4, 0] }, barWidth: '50%' }],
+  yAxis: { type: 'category', data: topLists.value.map((d) => d.name), axisLine: { lineStyle: { color: '#e5e7eb' } }, axisTick: { show: false }, axisLabel: { color: '#6b7280', fontSize: 11 } },
+  series: [{ type: 'bar', data: topLists.value.map((d) => d.count), itemStyle: { color: '#4f46e5', borderRadius: [0, 4, 4, 0] }, barWidth: '50%' }],
 }));
 
-const hasSmsChartData = computed(() => props.sms_over_time.some((item) => item.sent > 0 || item.failed > 0));
-const hasSourceChartData = computed(() => props.contacts_by_source.some((item) => item.count > 0));
-const hasStatusChartData = computed(() => props.contacts_by_status.some((item) => item.count > 0));
-const hasListChartData = computed(() => props.top_lists.some((item) => item.count > 0));
-const hasTagListData = computed(() => props.top_tags.some((item) => item.count > 0));
+const hasSmsChartData = computed(() => smsOverTime.value.some((item) => item.sent > 0 || item.failed > 0));
+const hasSourceChartData = computed(() => contactsBySource.value.some((item) => item.count > 0));
+const hasStatusChartData = computed(() => contactsByStatus.value.some((item) => item.count > 0));
+const hasListChartData = computed(() => topLists.value.some((item) => item.count > 0));
+const hasTagListData = computed(() => topTags.value.some((item) => item.count > 0));
 </script>
 
 <template>
@@ -87,10 +103,10 @@ const hasTagListData = computed(() => props.top_tags.some((item) => item.count >
     <PageHeader title="Reports" subtitle="Analytics and insights for your SMS campaigns." />
 
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-      <StatCard label="Total Contacts" :value="stats.total_contacts" :icon="Users" icon-color="text-primary" icon-bg="bg-primary-light" />
-      <StatCard label="Total SMS Sent" :value="stats.total_sms_sent" :icon="Send" icon-color="text-success" icon-bg="bg-success-light" />
-      <StatCard label="Total Campaigns" :value="stats.total_campaigns" :icon="CheckCircle" icon-color="text-info" icon-bg="bg-info-light" />
-      <StatCard label="Avg Success Rate" :value="stats.avg_success_rate" :icon="CheckCircle" icon-color="text-success" icon-bg="bg-success-light" format="percent" />
+      <StatCard label="Total Contacts" :value="safeStats.total_contacts" :icon="Users" icon-color="text-primary" icon-bg="bg-primary-light" />
+      <StatCard label="Total SMS Sent" :value="safeStats.total_sms_sent" :icon="Send" icon-color="text-success" icon-bg="bg-success-light" />
+      <StatCard label="Total Campaigns" :value="safeStats.total_campaigns" :icon="CheckCircle" icon-color="text-info" icon-bg="bg-info-light" />
+      <StatCard label="Avg Success Rate" :value="safeStats.avg_success_rate" :icon="CheckCircle" icon-color="text-success" icon-bg="bg-success-light" format="percent" />
     </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
@@ -145,7 +161,7 @@ const hasTagListData = computed(() => props.top_tags.some((item) => item.count >
         <CardHeader><CardTitle>Top Tags by Size</CardTitle></CardHeader>
         <CardContent>
           <div v-if="hasTagListData" class="min-h-[280px] space-y-3">
-            <div v-for="tag in top_tags" :key="tag.name" class="flex items-center justify-between">
+            <div v-for="tag in topTags" :key="tag.name" class="flex items-center justify-between">
               <span class="text-sm text-foreground">{{ tag.name }}</span>
               <span class="text-sm text-muted font-medium">{{ formatNumber(tag.count) }}</span>
             </div>

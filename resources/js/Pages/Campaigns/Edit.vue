@@ -37,18 +37,28 @@ const form = useForm({
   list_ids: props.campaign.target_config?.list_ids ?? ([] as number[]),
   tag_ids: props.campaign.target_config?.tag_ids ?? ([] as number[]),
   contact_ids: props.campaign.target_config?.contact_ids ?? ([] as number[]),
+  segment_id: props.campaign.target_config?.segment_id ? String(props.campaign.target_config.segment_id) : '',
   scheduled_at: props.campaign.scheduled_at ?? '',
   notes: props.campaign.notes ?? '',
 });
 
-const targetOptions = [
+const existingAdvancedFilter = computed(() => props.campaign.target_config?.advanced ?? null);
+
+const targetOptions = computed(() => [
   { label: 'All Contacts', value: 'all_contacts' },
   { label: 'By List', value: 'list' },
   { label: 'By Tag', value: 'tag' },
   { label: 'By Saved Segment', value: 'saved_segment' },
   { label: 'Manual Selection', value: 'manual_selection' },
-  { label: 'Advanced Filter', value: 'advanced_filter' },
-];
+  ...(props.campaign.target_type === 'advanced_filter'
+    ? [{ label: 'Advanced Filter', value: 'advanced_filter' }]
+    : []),
+]);
+
+const segmentOptions = computed(() => [
+  { label: 'Choose a saved segment', value: '' },
+  ...props.segments.map((segment) => ({ label: segment.name, value: String(segment.id) })),
+]);
 
 const audienceError = computed(() => {
   if (form.target_type === 'list' && form.list_ids.length === 0) {
@@ -61,6 +71,14 @@ const audienceError = computed(() => {
 
   if (form.target_type === 'manual_selection' && form.contact_ids.length === 0) {
     return 'Select at least one contact.';
+  }
+
+  if (form.target_type === 'saved_segment' && !form.segment_id) {
+    return 'Select a saved segment.';
+  }
+
+  if (form.target_type === 'advanced_filter' && !existingAdvancedFilter.value) {
+    return 'Advanced filter data is missing. Choose another target type.';
   }
 
   return '';
@@ -80,6 +98,8 @@ function submit() {
       list_ids: data.target_type === 'list' ? data.list_ids : undefined,
       tag_ids: data.target_type === 'tag' ? data.tag_ids : undefined,
       contact_ids: data.target_type === 'manual_selection' ? data.contact_ids : undefined,
+      segment_id: data.target_type === 'saved_segment' ? data.segment_id : undefined,
+      advanced: data.target_type === 'advanced_filter' ? existingAdvancedFilter.value : undefined,
     },
     notes: data.notes,
     scheduled_at: data.scheduled_at || undefined,
@@ -194,10 +214,13 @@ async function handleDelete() {
               <p v-if="audienceError && form.target_type === 'tag'" class="text-xs text-danger">{{ audienceError }}</p>
             </div>
 
-            <div v-if="form.target_type === 'saved_segment'" class="rounded-lg bg-gray-50 p-4">
-              <p class="text-sm text-muted">
-                Saved segment targeting is available in the multi-step campaign builder.
+            <div v-if="form.target_type === 'saved_segment'" class="space-y-1.5">
+              <Label>Select Segment</Label>
+              <Select v-model="form.segment_id" :options="segmentOptions" />
+              <p v-if="form.errors.segment_id || validationError('target_filters.segment_id')" class="text-xs text-danger">
+                {{ form.errors.segment_id || validationError('target_filters.segment_id') }}
               </p>
+              <p v-if="audienceError && form.target_type === 'saved_segment'" class="text-xs text-danger">{{ audienceError }}</p>
             </div>
 
             <div v-if="form.target_type === 'manual_selection'" class="space-y-1.5">
@@ -210,8 +233,9 @@ async function handleDelete() {
 
             <div v-if="form.target_type === 'advanced_filter'" class="rounded-lg bg-gray-50 p-4">
               <p class="text-sm text-muted">
-                Advanced filter is available in the multi-step campaign builder.
+                Existing advanced filter targeting will be preserved. Choose another target type to replace it.
               </p>
+              <p v-if="audienceError && form.target_type === 'advanced_filter'" class="mt-2 text-xs text-danger">{{ audienceError }}</p>
             </div>
           </CardContent>
         </Card>

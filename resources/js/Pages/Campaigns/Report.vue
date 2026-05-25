@@ -23,12 +23,23 @@ use([CanvasRenderer, PieChart, LineChart, TitleComponent, TooltipComponent, Grid
 
 const props = defineProps<{
   campaign: Campaign;
-  stats: CampaignStats;
+  stats?: CampaignStats;
 }>();
 
+const emptyStats: CampaignStats = {
+  total: 0,
+  sent: 0,
+  failed: 0,
+  skipped: 0,
+  pending: 0,
+  success_rate: 0,
+  timeline: [],
+};
+
+const safeStats = computed(() => props.stats ?? emptyStats);
 const { confirm } = useConfirm();
 const isResendingFailed = ref(false);
-const canResendFailed = computed(() => ['completed', 'failed'].includes(props.campaign.status) && props.stats.failed > 0);
+const canResendFailed = computed(() => ['completed', 'failed'].includes(props.campaign.status) && safeStats.value.failed > 0);
 
 const pieOption = computed(() => ({
   tooltip: { trigger: 'item', backgroundColor: '#fff', borderColor: '#e5e7eb', textStyle: { color: '#1a1a1a', fontSize: 12 } },
@@ -39,10 +50,10 @@ const pieOption = computed(() => ({
     avoidLabelOverlap: false,
     label: { show: false },
     data: [
-      { value: props.stats.sent, name: 'Sent', itemStyle: { color: '#10b981' } },
-      { value: props.stats.failed, name: 'Failed', itemStyle: { color: '#ef4444' } },
-      { value: props.stats.skipped, name: 'Skipped', itemStyle: { color: '#f59e0b' } },
-      { value: props.stats.pending, name: 'Pending', itemStyle: { color: '#d1d5db' } },
+      { value: safeStats.value.sent, name: 'Sent', itemStyle: { color: '#10b981' } },
+      { value: safeStats.value.failed, name: 'Failed', itemStyle: { color: '#ef4444' } },
+      { value: safeStats.value.skipped, name: 'Skipped', itemStyle: { color: '#f59e0b' } },
+      { value: safeStats.value.pending, name: 'Pending', itemStyle: { color: '#d1d5db' } },
     ],
   }],
 }));
@@ -51,25 +62,25 @@ const timelineOption = computed(() => ({
   tooltip: { trigger: 'axis', backgroundColor: '#fff', borderColor: '#e5e7eb', textStyle: { color: '#1a1a1a', fontSize: 12 } },
   legend: { data: ['Sent', 'Failed'], bottom: 0, textStyle: { color: '#6b7280', fontSize: 11 } },
   grid: { top: 10, right: 16, bottom: 36, left: 48 },
-  xAxis: { type: 'category', data: props.stats.timeline.map((d) => d.time), axisLine: { lineStyle: { color: '#e5e7eb' } }, axisTick: { show: false }, axisLabel: { color: '#6b7280', fontSize: 11 } },
+  xAxis: { type: 'category', data: safeStats.value.timeline.map((d) => d.time), axisLine: { lineStyle: { color: '#e5e7eb' } }, axisTick: { show: false }, axisLabel: { color: '#6b7280', fontSize: 11 } },
   yAxis: { type: 'value', axisLine: { show: false }, axisTick: { show: false }, splitLine: { lineStyle: { color: '#f3f4f6' } }, axisLabel: { color: '#6b7280', fontSize: 11 } },
   series: [
-    { name: 'Sent', type: 'line', data: props.stats.timeline.map((d) => d.sent), smooth: true, lineStyle: { color: '#10b981', width: 2 }, itemStyle: { color: '#10b981' }, areaStyle: { color: 'rgba(16,185,129,0.1)' } },
-    { name: 'Failed', type: 'line', data: props.stats.timeline.map((d) => d.failed), smooth: true, lineStyle: { color: '#ef4444', width: 2 }, itemStyle: { color: '#ef4444' } },
+    { name: 'Sent', type: 'line', data: safeStats.value.timeline.map((d) => d.sent), smooth: true, lineStyle: { color: '#10b981', width: 2 }, itemStyle: { color: '#10b981' }, areaStyle: { color: 'rgba(16,185,129,0.1)' } },
+    { name: 'Failed', type: 'line', data: safeStats.value.timeline.map((d) => d.failed), smooth: true, lineStyle: { color: '#ef4444', width: 2 }, itemStyle: { color: '#ef4444' } },
   ],
 }));
 
-const statCards = [
-  { label: 'Total', value: props.stats.total, icon: Clock, color: 'text-primary', bg: 'bg-primary-light' },
-  { label: 'Sent', value: props.stats.sent, icon: CheckCircle, color: 'text-success', bg: 'bg-success-light' },
-  { label: 'Failed', value: props.stats.failed, icon: XCircle, color: 'text-danger', bg: 'bg-danger-light' },
-  { label: 'Success Rate', value: props.stats.success_rate, icon: CheckCircle, color: 'text-success', bg: 'bg-success-light', format: 'percent' as const },
-];
+const statCards = computed(() => [
+  { label: 'Total', value: safeStats.value.total, icon: Clock, color: 'text-primary', bg: 'bg-primary-light' },
+  { label: 'Sent', value: safeStats.value.sent, icon: CheckCircle, color: 'text-success', bg: 'bg-success-light' },
+  { label: 'Failed', value: safeStats.value.failed, icon: XCircle, color: 'text-danger', bg: 'bg-danger-light' },
+  { label: 'Success Rate', value: safeStats.value.success_rate, icon: CheckCircle, color: 'text-success', bg: 'bg-success-light', format: 'percent' as const },
+]);
 
 async function resendFailedCampaign() {
   const confirmed = await confirm({
     title: 'Resend Failed',
-    message: `Queue ${props.stats.failed} failed recipient${props.stats.failed === 1 ? '' : 's'} for resend?`,
+    message: `Queue ${safeStats.value.failed} failed recipient${safeStats.value.failed === 1 ? '' : 's'} for resend?`,
     confirmLabel: 'Resend Failed',
   });
 
@@ -78,6 +89,7 @@ async function resendFailedCampaign() {
   isResendingFailed.value = true;
   router.post(route('campaigns.resend-failed', props.campaign.id), {}, {
     preserveScroll: true,
+    only: ['campaign', 'stats'],
     onFinish: () => {
       isResendingFailed.value = false;
     },

@@ -39,7 +39,23 @@ import {
 
 use([CanvasRenderer, LineChart, BarChart, TitleComponent, TooltipComponent, GridComponent, LegendComponent]);
 
-const props = defineProps<DashboardProps>();
+const props = defineProps<Partial<DashboardProps>>();
+
+const emptyStats: DashboardProps['stats'] = {
+  total_contacts: 0,
+  sms_sent_this_month: 0,
+  failed_sms: 0,
+  active_campaigns: 0,
+};
+
+const safeStats = computed(() => props.stats ?? emptyStats);
+const contactGrowth = computed(() => props.contact_growth ?? []);
+const campaignPerformance = computed(() => props.campaign_performance ?? []);
+const recentCampaigns = computed(() => props.recent_campaigns ?? []);
+const recentImports = computed(() => props.recent_imports ?? []);
+const topLists = computed(() => props.top_lists ?? []);
+const activityLog = computed(() => props.activity_log ?? []);
+const activityLogTotal = computed(() => props.activity_log_total ?? activityLog.value.length);
 
 const contactGrowthOption = computed(() => ({
   tooltip: {
@@ -51,7 +67,7 @@ const contactGrowthOption = computed(() => ({
   grid: { top: 10, right: 16, bottom: 24, left: 48 },
   xAxis: {
     type: 'category',
-    data: props.contact_growth.map((d) => d.month),
+    data: contactGrowth.value.map((d) => d.month),
     axisLine: { lineStyle: { color: '#e5e7eb' } },
     axisTick: { show: false },
     axisLabel: { color: '#6b7280', fontSize: 11 },
@@ -66,7 +82,7 @@ const contactGrowthOption = computed(() => ({
   series: [
     {
       type: 'line',
-      data: props.contact_growth.map((d) => d.count),
+      data: contactGrowth.value.map((d) => d.count),
       smooth: true,
       lineStyle: { color: '#4f46e5', width: 2 },
       areaStyle: {
@@ -101,7 +117,7 @@ const campaignPerformanceOption = computed(() => ({
   grid: { top: 10, right: 16, bottom: 36, left: 48 },
   xAxis: {
     type: 'category',
-    data: props.campaign_performance.map((d) => d.name),
+    data: campaignPerformance.value.map((d) => d.name),
     axisLine: { lineStyle: { color: '#e5e7eb' } },
     axisTick: { show: false },
     axisLabel: { color: '#6b7280', fontSize: 11, rotate: 20 },
@@ -117,22 +133,22 @@ const campaignPerformanceOption = computed(() => ({
     {
       name: 'Sent',
       type: 'bar',
-      data: props.campaign_performance.map((d) => d.sent),
+      data: campaignPerformance.value.map((d) => d.sent),
       itemStyle: { color: '#10b981', borderRadius: [4, 4, 0, 0] },
       barWidth: '35%',
     },
     {
       name: 'Failed',
       type: 'bar',
-      data: props.campaign_performance.map((d) => d.failed),
+      data: campaignPerformance.value.map((d) => d.failed),
       itemStyle: { color: '#ef4444', borderRadius: [4, 4, 0, 0] },
       barWidth: '35%',
     },
   ],
 }));
 
-const hasContactGrowthData = computed(() => props.contact_growth.some((item) => item.count > 0));
-const hasCampaignPerformanceData = computed(() => props.campaign_performance.some((item) => item.sent > 0 || item.failed > 0));
+const hasContactGrowthData = computed(() => contactGrowth.value.some((item) => item.count > 0));
+const hasCampaignPerformanceData = computed(() => campaignPerformance.value.some((item) => item.sent > 0 || item.failed > 0));
 
 const quickActions = [
   { label: 'Add Contact', icon: UserPlus, href: route('contacts.create'), color: 'bg-indigo-50 text-indigo-600' },
@@ -178,28 +194,28 @@ const quickActions = [
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
       <StatCard
         label="Total Contacts"
-        :value="stats.total_contacts"
+        :value="safeStats.total_contacts"
         :icon="Users"
         icon-color="text-primary"
         icon-bg="bg-primary-light"
       />
       <StatCard
         label="SMS Sent This Month"
-        :value="stats.sms_sent_this_month"
+        :value="safeStats.sms_sent_this_month"
         :icon="Send"
         icon-color="text-success"
         icon-bg="bg-success-light"
       />
       <StatCard
         label="Failed SMS"
-        :value="stats.failed_sms"
+        :value="safeStats.failed_sms"
         :icon="AlertTriangle"
         icon-color="text-danger"
         icon-bg="bg-danger-light"
       />
       <StatCard
         label="Active Campaigns"
-        :value="stats.active_campaigns"
+        :value="safeStats.active_campaigns"
         :icon="Zap"
         icon-color="text-warning"
         icon-bg="bg-warning-light"
@@ -258,12 +274,12 @@ const quickActions = [
           </Link>
         </CardHeader>
         <CardContent>
-          <div v-if="recent_campaigns.length === 0" class="py-8 text-center text-sm text-muted">
+          <div v-if="recentCampaigns.length === 0" class="py-8 text-center text-sm text-muted">
             No campaigns yet
           </div>
           <div v-else class="space-y-3">
             <div
-              v-for="campaign in recent_campaigns"
+              v-for="campaign in recentCampaigns"
               :key="campaign.id"
               class="flex items-center justify-between py-2 border-b border-border last:border-0"
             >
@@ -288,12 +304,12 @@ const quickActions = [
           </Link>
         </CardHeader>
         <CardContent>
-          <div v-if="recent_imports.length === 0" class="py-8 text-center text-sm text-muted">
+          <div v-if="recentImports.length === 0" class="py-8 text-center text-sm text-muted">
             No imports yet
           </div>
           <div v-else class="space-y-3">
             <div
-              v-for="imp in recent_imports"
+              v-for="imp in recentImports"
               :key="imp.id"
               class="flex items-center justify-between py-2 border-b border-border last:border-0"
             >
@@ -316,12 +332,12 @@ const quickActions = [
           </Link>
         </CardHeader>
         <CardContent>
-          <div v-if="top_lists.length === 0" class="py-8 text-center text-sm text-muted">
+          <div v-if="topLists.length === 0" class="py-8 text-center text-sm text-muted">
             No lists yet
           </div>
           <div v-else class="space-y-3">
             <div
-              v-for="list in top_lists"
+              v-for="list in topLists"
               :key="list.id"
               class="flex items-center justify-between py-2 border-b border-border last:border-0"
             >
@@ -341,8 +357,8 @@ const quickActions = [
       <CardHeader class="flex flex-row items-center justify-between">
         <div>
           <CardTitle>Recent Activity</CardTitle>
-          <p v-if="activity_log_total > activity_log.length" class="mt-1 text-xs text-muted">
-            Latest {{ activity_log.length }} of {{ formatNumber(activity_log_total) }}
+          <p v-if="activityLogTotal > activityLog.length" class="mt-1 text-xs text-muted">
+            Latest {{ activityLog.length }} of {{ formatNumber(activityLogTotal) }}
           </p>
         </div>
         <Link :href="route('activity-logs.index')" class="text-xs text-primary hover:text-primary-hover">
@@ -350,12 +366,12 @@ const quickActions = [
         </Link>
       </CardHeader>
       <CardContent>
-        <div v-if="activity_log.length === 0" class="py-8 text-center text-sm text-muted">
+        <div v-if="activityLog.length === 0" class="py-8 text-center text-sm text-muted">
           No recent activity
         </div>
         <div v-else class="space-y-3">
           <div
-            v-for="log in activity_log"
+            v-for="log in activityLog"
             :key="log.id"
             class="flex items-start gap-3 py-2 border-b border-border last:border-0"
           >

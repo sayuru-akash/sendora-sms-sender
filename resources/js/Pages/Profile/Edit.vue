@@ -11,7 +11,7 @@ import Input from '@/Components/ui/Input.vue';
 import Label from '@/Components/ui/Label.vue';
 import Alert from '@/Components/ui/Alert.vue';
 import Separator from '@/Components/ui/Separator.vue';
-import { Head, useForm, usePage } from '@inertiajs/vue3';
+import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
 import { Save, Lock, Trash2 } from 'lucide-vue-next';
 import { computed } from 'vue';
 import { useConfirm } from '@/composables/useConfirm';
@@ -22,12 +22,12 @@ defineProps<{
 }>();
 
 const page = usePage();
-const user = computed(() => page.props.auth.user);
+const user = computed(() => page.props.auth?.user);
 const { confirm } = useConfirm();
 
 const profileForm = useForm({
-  name: user.value.name,
-  email: user.value.email,
+  name: user.value?.name ?? '',
+  email: user.value?.email ?? '',
 });
 
 const passwordForm = useForm({
@@ -88,7 +88,7 @@ async function handleDeleteAccount() {
               <Input id="profile_email" v-model="profileForm.email" type="email" :error="profileForm.errors.email" />
               <p v-if="profileForm.errors.email" class="text-xs text-danger">{{ profileForm.errors.email }}</p>
             </div>
-            <div v-if="mustVerifyEmail && !user.email_verified_at" class="text-sm text-muted">
+            <div v-if="mustVerifyEmail && !user?.email_verified_at" class="text-sm text-muted">
               Your email is unverified.
               <Link :href="route('verification.send')" method="post" as="button" class="text-primary hover:text-primary-hover underline">
                 Resend verification email

@@ -18,15 +18,33 @@ import type { ListModel, Tag } from '@/types';
 
 const props = defineProps<{
   import_id: number;
-  columns: ImportColumnMapping;
-  lists: ListModel[];
-  tags: Tag[];
-  options: {
+  columns?: ImportColumnMapping;
+  lists?: ListModel[];
+  tags?: Tag[];
+  options?: {
     duplicate_handling: string;
     list_ids: number[];
     tag_ids: number[];
   };
 }>();
+
+const emptyColumns: ImportColumnMapping = {
+  mapping: {},
+  contact_fields: [],
+  file_columns: [],
+  preview_data: [],
+};
+
+const emptyOptions = {
+  duplicate_handling: 'skip',
+  list_ids: [],
+  tag_ids: [],
+};
+
+const safeColumns = computed(() => props.columns ?? emptyColumns);
+const safeLists = computed(() => props.lists ?? []);
+const safeTags = computed(() => props.tags ?? []);
+const safeOptions = computed(() => props.options ?? emptyOptions);
 
 const contactFields = [
   { label: '-- Skip this column --', value: '' },
@@ -44,28 +62,28 @@ const contactFields = [
 ];
 
 function mappedFieldForColumn(column: string): string {
-  const entry = Object.entries(props.columns.mapping).find(([, mappedColumn]) => mappedColumn === column);
+  const entry = Object.entries(safeColumns.value.mapping).find(([, mappedColumn]) => mappedColumn === column);
 
   return entry?.[0] ?? '';
 }
 
 const mapping = ref<Record<string, string>>(
-  Object.fromEntries(props.columns.file_columns.map((col: string) => [col, mappedFieldForColumn(col)]))
+  Object.fromEntries(safeColumns.value.file_columns.map((col: string) => [col, mappedFieldForColumn(col)]))
 );
 
-const phoneColumn = ref(props.columns.mapping.phone ?? '');
+const phoneColumn = ref(safeColumns.value.mapping.phone ?? '');
 
 const phoneOptions = computed(() => [
   { label: '-- Select phone column --', value: '' },
-  ...props.columns.file_columns.map((col: string) => ({ label: col, value: col })),
+  ...safeColumns.value.file_columns.map((col: string) => ({ label: col, value: col })),
 ]);
 
 const form = useForm({
   mapping: mapping.value,
   phone_column: '',
-  duplicate_handling: props.options.duplicate_handling,
-  list_ids: [...props.options.list_ids],
-  tag_ids: [...props.options.tag_ids],
+  duplicate_handling: safeOptions.value.duplicate_handling,
+  list_ids: [...safeOptions.value.list_ids],
+  tag_ids: [...safeOptions.value.tag_ids],
 });
 const formErrors = computed(() => form.errors as Record<string, string | undefined>);
 
@@ -149,7 +167,7 @@ const isValid = computed(() => {
               <Label>Assign to Lists</Label>
               <MultiSelectCombobox
                 v-model="form.list_ids"
-                :options="lists"
+                :options="safeLists"
                 placeholder="Choose lists"
                 search-placeholder="Search lists..."
                 empty-text="No matching lists"
@@ -161,7 +179,7 @@ const isValid = computed(() => {
               <Label>Assign Tags</Label>
               <MultiSelectCombobox
                 v-model="form.tag_ids"
-                :options="tags"
+                :options="safeTags"
                 placeholder="Choose tags"
                 search-placeholder="Search tags..."
                 empty-text="No matching tags"
@@ -180,14 +198,14 @@ const isValid = computed(() => {
         <CardContent>
           <div class="space-y-4">
             <div
-              v-for="col in columns.file_columns"
+              v-for="col in safeColumns.file_columns"
               :key="col"
               class="flex items-center gap-4 p-3 rounded-lg border border-border hover:bg-gray-50 transition-colors"
             >
               <div class="flex-1 min-w-0">
                 <p class="text-sm font-medium text-foreground truncate">{{ col }}</p>
-                <p v-if="columns.preview_data.length" class="text-xs text-muted truncate">
-                  Preview: {{ columns.preview_data[0]?.[col] ?? '—' }}
+                <p v-if="safeColumns.preview_data.length" class="text-xs text-muted truncate">
+                  Preview: {{ safeColumns.preview_data[0]?.[col] ?? '—' }}
                 </p>
               </div>
 
@@ -202,7 +220,7 @@ const isValid = computed(() => {
       </Card>
 
       <!-- Preview Table -->
-      <Card v-if="columns.preview_data.length">
+      <Card v-if="safeColumns.preview_data.length">
         <CardHeader>
           <CardTitle>Data Preview (first 5 rows)</CardTitle>
         </CardHeader>
@@ -211,15 +229,15 @@ const isValid = computed(() => {
             <table class="w-full text-xs">
               <thead>
                 <tr class="border-b border-border">
-                  <th v-for="col in columns.file_columns" :key="col" class="px-3 py-2 text-left font-medium text-muted uppercase">
+                  <th v-for="col in safeColumns.file_columns" :key="col" class="px-3 py-2 text-left font-medium text-muted uppercase">
                     {{ col }}
                     <span v-if="mapping[col]" class="text-primary block normal-case">→ {{ mapping[col] }}</span>
                   </th>
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="(row, i) in columns.preview_data.slice(0, 5)" :key="i" class="border-b border-border">
-                  <td v-for="col in columns.file_columns" :key="col" class="px-3 py-2 text-foreground">
+                <tr v-for="(row, i) in safeColumns.preview_data.slice(0, 5)" :key="i" class="border-b border-border">
+                  <td v-for="col in safeColumns.file_columns" :key="col" class="px-3 py-2 text-foreground">
                     {{ row[col] ?? '—' }}
                   </td>
                 </tr>

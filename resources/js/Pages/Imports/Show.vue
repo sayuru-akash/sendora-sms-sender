@@ -22,18 +22,17 @@ const props = defineProps<{
 }>();
 
 const importData = computed(() => props.import);
-const imp = props.import;
 
 function downloadFailedRows() {
   window.open(route('imports.download-failed', props.import.id));
 }
 
-const stats = [
-  { label: 'Total Rows', value: imp.total_rows, icon: FileUp, color: 'text-primary', bg: 'bg-primary-light' },
-  { label: 'Successful', value: imp.successful_rows, icon: CheckCircle, color: 'text-success', bg: 'bg-success-light' },
-  { label: 'Failed', value: imp.failed_rows, icon: XCircle, color: 'text-danger', bg: 'bg-danger-light' },
-  { label: 'Duplicates', value: imp.duplicate_rows, icon: Copy, color: 'text-warning', bg: 'bg-warning-light' },
-];
+const stats = computed(() => [
+  { label: 'Total Rows', value: importData.value.total_rows, icon: FileUp, color: 'text-primary', bg: 'bg-primary-light' },
+  { label: 'Successful', value: importData.value.successful_rows, icon: CheckCircle, color: 'text-success', bg: 'bg-success-light' },
+  { label: 'Failed', value: importData.value.failed_rows, icon: XCircle, color: 'text-danger', bg: 'bg-danger-light' },
+  { label: 'Duplicates', value: importData.value.duplicate_rows, icon: Copy, color: 'text-warning', bg: 'bg-warning-light' },
+]);
 
 function firstItems(items?: Array<{ name: string }>) {
   return (items ?? []).slice(0, 3);
@@ -78,10 +77,10 @@ function remainingItems(items?: Array<{ name: string }>) {
     <Card class="mb-6">
       <CardContent class="pt-6">
         <CampaignProgress
-          :sent="imp.successful_rows"
-          :failed="imp.failed_rows"
-          :pending="imp.total_rows - imp.processed_rows"
-          :total="imp.total_rows"
+          :sent="importData.successful_rows"
+          :failed="importData.failed_rows"
+          :pending="importData.total_rows - importData.processed_rows"
+          :total="importData.total_rows"
         />
       </CardContent>
     </Card>

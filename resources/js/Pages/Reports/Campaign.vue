@@ -36,26 +36,36 @@ use([CanvasRenderer, LineChart, BarChart, PieChart, TitleComponent, TooltipCompo
 
 interface Props {
   campaign: Campaign;
-  status_counts: {
+  status_counts?: {
     sent: number;
     failed: number;
     skipped: number;
     pending: number;
     delivered?: number;
   };
-  hourly_data: { hour: string; count: number }[];
-  failed_messages: SmsRecord[];
+  hourly_data?: { hour: string; count: number }[];
+  failed_messages?: SmsRecord[];
 }
 
 const props = defineProps<Props>();
+const emptyStatusCounts = {
+  sent: 0,
+  failed: 0,
+  skipped: 0,
+  pending: 0,
+  delivered: 0,
+};
+const statusCounts = computed(() => props.status_counts ?? emptyStatusCounts);
+const hourlyData = computed(() => props.hourly_data ?? []);
+const failedMessages = computed(() => props.failed_messages ?? []);
 
 const totalRecipients = computed(() => {
-  return Object.values(props.status_counts).reduce((sum, count) => sum + count, 0);
+  return Object.values(statusCounts.value).reduce((sum, count) => sum + count, 0);
 });
 
 const successRate = computed(() => {
   if (totalRecipients.value === 0) return 0;
-  const sent = props.status_counts.sent + (props.status_counts.delivered ?? 0);
+  const sent = statusCounts.value.sent + (statusCounts.value.delivered ?? 0);
   return Math.round((sent / totalRecipients.value) * 100);
 });
 
@@ -69,21 +79,21 @@ const statCards = computed(() => [
   },
   {
     label: 'Sent',
-    value: props.status_counts.sent,
+    value: statusCounts.value.sent,
     icon: CheckCircle,
     iconColor: 'text-success',
     iconBg: 'bg-success-light',
   },
   {
     label: 'Failed',
-    value: props.status_counts.failed,
+    value: statusCounts.value.failed,
     icon: XCircle,
     iconColor: 'text-danger',
     iconBg: 'bg-danger-light',
   },
   {
     label: 'Skipped',
-    value: props.status_counts.skipped,
+    value: statusCounts.value.skipped,
     icon: SkipForward,
     iconColor: 'text-warning',
     iconBg: 'bg-warning-light',
@@ -112,7 +122,7 @@ const hourlyChartOption = computed(() => ({
   grid: { top: 10, right: 16, bottom: 24, left: 48 },
   xAxis: {
     type: 'category',
-    data: props.hourly_data.map((d) => d.hour),
+    data: hourlyData.value.map((d) => d.hour),
     axisLine: { lineStyle: { color: '#e5e7eb' } },
     axisTick: { show: false },
     axisLabel: { color: '#6b7280', fontSize: 11, rotate: 30 },
@@ -127,7 +137,7 @@ const hourlyChartOption = computed(() => ({
   series: [
     {
       type: 'bar',
-      data: props.hourly_data.map((d) => d.count),
+      data: hourlyData.value.map((d) => d.count),
       itemStyle: {
         color: '#4f46e5',
         borderRadius: [4, 4, 0, 0],
@@ -163,7 +173,7 @@ const statusChartOption = computed(() => ({
       radius: ['45%', '70%'],
       avoidLabelOverlap: false,
       label: { show: false },
-      data: Object.entries(props.status_counts)
+      data: Object.entries(statusCounts.value)
         .filter(([, value]) => value > 0)
         .map(([key, value]) => ({
           value,
@@ -217,7 +227,7 @@ const statusChartOption = computed(() => ({
           <CardTitle>Messages Sent Over Time</CardTitle>
         </CardHeader>
         <CardContent>
-          <div v-if="hourly_data.length === 0" class="flex h-[300px] items-center justify-center text-sm text-muted">
+          <div v-if="hourlyData.length === 0" class="flex h-[300px] items-center justify-center text-sm text-muted">
             No hourly data available yet.
           </div>
           <VChart
@@ -252,11 +262,11 @@ const statusChartOption = computed(() => ({
       <CardHeader>
         <div class="flex items-center justify-between">
           <CardTitle>Failed Messages</CardTitle>
-          <Badge variant="danger">{{ formatNumber(failed_messages.length) }} failed</Badge>
+          <Badge variant="danger">{{ formatNumber(failedMessages.length) }} failed</Badge>
         </div>
       </CardHeader>
       <CardContent>
-        <div v-if="failed_messages.length === 0" class="py-8 text-center text-sm text-muted">
+        <div v-if="failedMessages.length === 0" class="py-8 text-center text-sm text-muted">
           No failed messages. All messages were sent successfully.
         </div>
         <div v-else class="rounded-xl border border-border overflow-hidden">
@@ -271,7 +281,7 @@ const statusChartOption = computed(() => ({
             </thead>
             <tbody>
               <tr
-                v-for="message in failed_messages"
+                v-for="message in failedMessages"
                 :key="message.id"
                 class="border-b border-border last:border-0 hover:bg-gray-50/50 transition-colors"
               >

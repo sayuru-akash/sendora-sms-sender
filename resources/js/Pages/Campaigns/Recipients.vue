@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import AppLayout from '@/Components/layout/AppLayout.vue';
 import PageHeader from '@/Components/common/PageHeader.vue';
 import StatusBadge from '@/Components/common/StatusBadge.vue';
@@ -17,11 +17,22 @@ import { formatDateTime } from '@/lib/utils';
 
 const props = defineProps<{
   campaign: Campaign;
-  recipients: { data: CampaignRecipient[]; meta: PaginationType };
-  filters: { status?: string; per_page?: string };
+  recipients?: { data: CampaignRecipient[]; meta: PaginationType };
+  filters?: { status?: string; per_page?: string };
 }>();
 
-const statusFilter = ref(props.filters.status ?? '');
+const emptyMeta: PaginationType = {
+  current_page: 1,
+  last_page: 1,
+  per_page: 25,
+  total: 0,
+  from: null,
+  to: null,
+};
+
+const safeRecipients = computed(() => props.recipients ?? { data: [], meta: emptyMeta });
+const safeFilters = computed(() => props.filters ?? {});
+const statusFilter = ref(safeFilters.value.status ?? '');
 
 const statusOptions = [
   { label: 'All Statuses', value: '' },
@@ -49,7 +60,7 @@ function applyFilter() {
     { label: campaign.name, href: route('campaigns.show', campaign.id) },
     { label: 'Recipients' },
   ]">
-    <PageHeader :title="`Recipients: ${campaign.name}`" :subtitle="`${recipients.meta.total} recipients`">
+    <PageHeader :title="`Recipients: ${campaign.name}`" :subtitle="`${safeRecipients.meta.total} recipients`">
       <template #actions>
         <Link :href="route('campaigns.show', campaign.id)">
           <Button variant="outline">
@@ -68,7 +79,7 @@ function applyFilter() {
     </div>
 
     <!-- Recipients Table -->
-    <div v-if="recipients.data.length === 0" class="py-8">
+    <div v-if="safeRecipients.data.length === 0" class="py-8">
       <EmptyState
         :icon="Users"
         title="No recipients found"
@@ -90,7 +101,7 @@ function applyFilter() {
           </thead>
           <tbody>
             <tr
-              v-for="recipient in recipients.data"
+              v-for="recipient in safeRecipients.data"
               :key="recipient.id"
               class="border-b border-border hover:bg-gray-50/50 transition-colors"
             >
@@ -114,7 +125,7 @@ function applyFilter() {
         </table>
       </div>
 
-      <Pagination :meta="recipients.meta" />
+      <Pagination :meta="safeRecipients.meta" />
     </div>
   </AppLayout>
 </template>

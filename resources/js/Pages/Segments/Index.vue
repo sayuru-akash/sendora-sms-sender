@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import AppLayout from '@/Components/layout/AppLayout.vue';
 import PageHeader from '@/Components/common/PageHeader.vue';
 import Pagination from '@/Components/common/Pagination.vue';
@@ -14,10 +15,20 @@ import { formatDate, formatNumber } from '@/lib/utils';
 import { useConfirm } from '@/composables/useConfirm';
 
 const props = defineProps<{
-  segments: { data: SavedSegment[]; meta: PaginationType };
-  filters: Record<string, string | undefined>;
+  segments?: { data: SavedSegment[]; meta: PaginationType };
+  filters?: Record<string, string | undefined>;
 }>();
 
+const emptyMeta: PaginationType = {
+  current_page: 1,
+  last_page: 1,
+  per_page: 25,
+  total: 0,
+  from: null,
+  to: null,
+};
+
+const safeSegments = computed(() => props.segments ?? { data: [], meta: emptyMeta });
 const { confirm } = useConfirm();
 
 async function deleteSegment(segment: SavedSegment) {
@@ -51,7 +62,7 @@ function formatFiltersSummary(filters: SavedSegment['filters']): string {
   <Head title="Saved Segments" />
 
   <AppLayout :breadcrumbs="[{ label: 'Segments' }]">
-    <PageHeader title="Saved Segments" :subtitle="`${formatNumber(segments.meta.total)} segments`">
+    <PageHeader title="Saved Segments" :subtitle="`${formatNumber(safeSegments.meta.total)} segments`">
       <template #actions>
         <Link :href="route('segments.create')">
           <Button>
@@ -62,7 +73,7 @@ function formatFiltersSummary(filters: SavedSegment['filters']): string {
       </template>
     </PageHeader>
 
-    <div v-if="segments.data.length === 0" class="py-8">
+    <div v-if="safeSegments.data.length === 0" class="py-8">
       <EmptyState
         :icon="Filter"
         title="No saved segments"
@@ -94,7 +105,7 @@ function formatFiltersSummary(filters: SavedSegment['filters']): string {
           </thead>
           <tbody>
             <tr
-              v-for="segment in segments.data"
+              v-for="segment in safeSegments.data"
               :key="segment.id"
               class="border-b border-border hover:bg-gray-50/50 transition-colors"
             >
@@ -142,7 +153,7 @@ function formatFiltersSummary(filters: SavedSegment['filters']): string {
         </table>
       </div>
 
-      <Pagination :meta="segments.meta" />
+      <Pagination :meta="safeSegments.meta" />
     </div>
   </AppLayout>
 </template>

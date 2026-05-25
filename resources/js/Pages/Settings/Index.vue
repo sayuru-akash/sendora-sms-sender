@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed } from 'vue';
 import AppLayout from '@/Components/layout/AppLayout.vue';
 import PageHeader from '@/Components/common/PageHeader.vue';
 import Card from '@/Components/ui/Card.vue';
@@ -21,24 +21,39 @@ import { Head, useForm } from '@inertiajs/vue3';
 import { Save, Send, CheckCircle } from 'lucide-vue-next';
 import { toast } from 'vue-sonner';
 
+interface SettingsPayload {
+  company_name: string;
+  timezone: string;
+  date_format: string;
+  default_country_code: string;
+  sender_id: string;
+  sms_provider: string;
+  max_import_file_size: number;
+  default_duplicate_handling: string;
+}
+
 const props = defineProps<{
-  settings: {
-    company_name: string;
-    timezone: string;
-    date_format: string;
-    default_country_code: string;
-    sender_id: string;
-    sms_provider: string;
-    max_import_file_size: number;
-    default_duplicate_handling: string;
-  };
+  settings?: SettingsPayload;
 }>();
 
+const defaultSettings: SettingsPayload = {
+  company_name: 'Sendora',
+  timezone: 'Asia/Colombo',
+  date_format: 'd/m/Y',
+  default_country_code: '+94',
+  sender_id: 'SITC Campus',
+  sms_provider: 'notifylk',
+  max_import_file_size: 10,
+  default_duplicate_handling: 'skip',
+};
+
+const safeSettings = computed(() => props.settings ?? defaultSettings);
+
 const generalForm = useForm({
-  company_name: props.settings.company_name,
-  timezone: props.settings.timezone,
-  date_format: props.settings.date_format,
-  default_country_code: props.settings.default_country_code,
+  company_name: safeSettings.value.company_name,
+  timezone: safeSettings.value.timezone,
+  date_format: safeSettings.value.date_format,
+  default_country_code: safeSettings.value.default_country_code,
 });
 
 const smsTestForm = useForm({
@@ -134,11 +149,11 @@ function sendTestSms() {
               <dl class="space-y-3 text-sm max-w-md">
                 <div class="flex justify-between">
                   <dt class="text-muted">Provider</dt>
-                  <dd class="font-medium text-foreground capitalize">{{ settings.sms_provider }}</dd>
+                  <dd class="font-medium text-foreground capitalize">{{ safeSettings.sms_provider }}</dd>
                 </div>
                 <div class="flex justify-between">
                   <dt class="text-muted">Sender ID</dt>
-                  <dd class="font-medium text-foreground">{{ settings.sender_id }}</dd>
+                  <dd class="font-medium text-foreground">{{ safeSettings.sender_id }}</dd>
                 </div>
               </dl>
               <Alert variant="info" class="mt-4">
@@ -184,11 +199,11 @@ function sendTestSms() {
             <dl class="space-y-3 text-sm max-w-md">
               <div class="flex justify-between">
                 <dt class="text-muted">Max File Size</dt>
-                <dd class="font-medium text-foreground">{{ settings.max_import_file_size }}MB</dd>
+                <dd class="font-medium text-foreground">{{ safeSettings.max_import_file_size }}MB</dd>
               </div>
               <div class="flex justify-between">
                 <dt class="text-muted">Default Duplicate Handling</dt>
-                <dd class="font-medium text-foreground capitalize">{{ settings.default_duplicate_handling }}</dd>
+                <dd class="font-medium text-foreground capitalize">{{ safeSettings.default_duplicate_handling }}</dd>
               </div>
             </dl>
           </CardContent>

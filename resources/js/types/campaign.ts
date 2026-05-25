@@ -43,6 +43,8 @@ export interface CampaignTargetConfig {
     list_ids?: number[];
     tag_ids?: number[];
     contact_ids?: number[];
+    segment_id?: number | string | null;
+    advanced?: Record<string, unknown> | null;
     include_all?: boolean;
     filters?: Record<string, unknown>;
     exclude_unsubscribed?: boolean;
