@@ -149,9 +149,11 @@ class ReportController extends Controller
     {
         $timestamp = 'COALESCE(sent_at, failed_at, created_at)';
 
-        return DB::connection()->getDriverName() === 'sqlite'
-            ? "strftime('%Y-%m-%d %H:00', {$timestamp})"
-            : "TO_CHAR({$timestamp}, 'YYYY-MM-DD HH24:00')";
+        return match (DB::connection()->getDriverName()) {
+            'mysql', 'mariadb' => "DATE_FORMAT({$timestamp}, '%Y-%m-%d %H:00')",
+            'sqlite' => "strftime('%Y-%m-%d %H:00', {$timestamp})",
+            default => "TO_CHAR({$timestamp}, 'YYYY-MM-DD HH24:00')",
+        };
     }
 
     protected function smsOverTimeTimestampExpression(): string
@@ -163,9 +165,11 @@ class ReportController extends Controller
     {
         $timestamp = $this->smsOverTimeTimestampExpression();
 
-        return DB::connection()->getDriverName() === 'sqlite'
-            ? "strftime('%Y-%m', {$timestamp})"
-            : "TO_CHAR({$timestamp}, 'YYYY-MM')";
+        return match (DB::connection()->getDriverName()) {
+            'mysql', 'mariadb' => "DATE_FORMAT({$timestamp}, '%Y-%m')",
+            'sqlite' => "strftime('%Y-%m', {$timestamp})",
+            default => "TO_CHAR({$timestamp}, 'YYYY-MM')",
+        };
     }
 
     /**

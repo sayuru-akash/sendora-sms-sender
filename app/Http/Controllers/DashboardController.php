@@ -70,8 +70,14 @@ class DashboardController extends Controller
             ]);
 
         // Contact growth data (last 12 months)
+        $contactGrowthMonthExpression = match (DB::connection()->getDriverName()) {
+            'mysql', 'mariadb' => "DATE_FORMAT(created_at, '%Y-%m')",
+            'sqlite' => "strftime('%Y-%m', created_at)",
+            default => "TO_CHAR(created_at, 'YYYY-MM')",
+        };
+
         $contactGrowth = Contact::select(
-            DB::raw("TO_CHAR(created_at, 'YYYY-MM') as month"),
+            DB::raw("{$contactGrowthMonthExpression} as month"),
             DB::raw('COUNT(*) as count')
         )
             ->where('created_at', '>=', now()->subMonths(12))
