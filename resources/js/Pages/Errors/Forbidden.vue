@@ -16,10 +16,10 @@ import { Home, ShieldAlert } from 'lucide-vue-next';
       <p class="text-sm text-muted mb-6">
         You don't have permission to access this page. Contact your administrator if you believe this is an error.
       </p>
-      <Link :href="route('dashboard')">
+      <Link :href="route('home')">
         <Button>
           <Home class="h-4 w-4" />
-          Back to Dashboard
+          Back to home
         </Button>
       </Link>
     </div>

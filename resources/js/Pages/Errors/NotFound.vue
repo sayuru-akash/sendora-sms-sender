@@ -15,10 +15,10 @@ import { Home } from 'lucide-vue-next';
       <p class="text-sm text-muted mb-6">
         The page you're looking for doesn't exist or has been moved.
       </p>
-      <Link :href="route('dashboard')">
+      <Link :href="route('home')">
         <Button>
           <Home class="h-4 w-4" />
-          Back to Dashboard
+          Back to home
         </Button>
       </Link>
     </div>

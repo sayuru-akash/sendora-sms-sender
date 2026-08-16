@@ -8,7 +8,7 @@ import SendoraLogo from '@/Components/icons/SendoraLogo.vue';
     <div class="w-full max-w-md">
       <!-- Logo & Branding -->
       <div class="mb-8 flex flex-col items-center">
-        <Link href="/" class="mb-4">
+        <Link :href="route('home')" class="mb-4">
           <SendoraLogo class="h-12 w-12" />
         </Link>
         <h1 class="text-2xl font-bold text-foreground tracking-tight">Sendora</h1>
